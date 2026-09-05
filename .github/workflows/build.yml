@@ -1,9 +1,14 @@
-name: Build Launcher EXE
+name: Build Launcher EXE & Release
 
 on:
   push:
     branches: [ "main" ]
+    tags: [ "v*" ] # Déclenche aussi quand tu crées une version (ex: v1.0)
   workflow_dispatch:
+
+# Autorisation obligatoire pour que le bot puisse publier la Release sur la page GitHub
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -20,11 +25,10 @@ jobs:
         distribution: 'temurin'
         cache: maven
         
-    - name: Build EXE with Maven
-      run: mvn clean package
-      
-    - name: Upload EXE
-      uses: actions/upload-artifact@v4
-      with:
-        name: ZRLauncher-App
-        path: target/ZRLauncher.exe
+    - name: 📦 Build EXE with Maven
+      # Attention: on met la compilation AVANT de créer le JRE, car "clean" supprime le dossier target
+      run: mvn clean package -B
+
+    - name: 🛠️ Génération du mini-JRE Windows (jlink)
+      run: |
+        # On utili
