@@ -74,6 +74,7 @@
                                 <mainClass>me.cryo.zrlauncher.ZRLauncher</mainClass>
                             </classPath>
                             <jre>
+                                <path>%JAVA_HOME%</path> <!-- LIGNE AJOUTÉE ICI -->
                                 <minVersion>17.0.0</minVersion>
                                 <opts>
                                     <opt>-Dfile.encoding=UTF-8</opt>
