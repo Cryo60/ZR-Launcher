@@ -1,0 +1,6 @@
+/target/
+/jre/
+*.exe
+*.zip
+.idea/
+*.iml
