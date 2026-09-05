@@ -70,9 +70,7 @@
                             <outfile>${project.build.directory}/ZRLauncher.exe</outfile>
                             <jar>${project.build.directory}/${project.artifactId}-${project.version}-jar-with-dependencies.jar</jar>
                             <errTitle>ZombieRool Launcher Error</errTitle>
-                            <classPath>
-                                <mainClass>me.cryo.zrlauncher.ZRLauncher</mainClass>
-                            </classPath>
+                            <mainClass>me.cryo.zrlauncher.ZRLauncher</mainClass>
                             <jre>
                                 <minVersion>17.0.0</minVersion>
                                 <downloadUrl>https://adoptium.net/fr/temurin/releases/?version=17</downloadUrl>
