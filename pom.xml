@@ -80,8 +80,7 @@
                                     <opt>-Dfile.encoding=UTF-8</opt>
                                 </opts>
                             </jre>
-                            <!-- Voici la ligne qui indique où trouver l'icône -->
-                            <icon>icon.ico</icon>
+                            <icon>${project.basedir}/icon.ico</icon>
                         </configuration>
                     </execution>
                 </executions>
