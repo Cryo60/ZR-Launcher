@@ -30,8 +30,11 @@
     </dependencies>
 
     <build>
+        <!-- Permet d'avoir des noms de fichiers propres sans le numéro de version à rallonge -->
+        <finalName>ZRLauncher</finalName>
+        
         <plugins>
-            <!-- Création du JAR avec dépendances -->
+            <!-- 1. Création du JAR avec dépendances -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
@@ -55,7 +58,7 @@
                 </executions>
             </plugin>
             
-            <!-- Création du .exe avec Launch4j -->
+            <!-- 2. Création du .exe avec Launch4j -->
             <plugin>
                 <groupId>com.akathist.maven.plugins.launch4j</groupId>
                 <artifactId>launch4j-maven-plugin</artifactId>
@@ -68,10 +71,10 @@
                         <configuration>
                             <headerType>gui</headerType>
                             <outfile>${project.build.directory}/ZRLauncher.exe</outfile>
-                            <jar>${project.build.directory}/${project.artifactId}-${project.version}-jar-with-dependencies.jar</jar>
+                            <jar>${project.build.directory}/ZRLauncher-jar-with-dependencies.jar</jar>
                             <errTitle>ZombieRool Launcher Error</errTitle>
                             <jre>
-                                <path>%JAVA_HOME%</path>
+                                <path>jre</path>
                                 <minVersion>17</minVersion>
                                 <opts>
                                     <opt>-Dfile.encoding=UTF-8</opt>
