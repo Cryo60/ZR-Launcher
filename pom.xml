@@ -71,7 +71,7 @@
                             <jar>${project.build.directory}/${project.artifactId}-${project.version}-jar-with-dependencies.jar</jar>
                             <errTitle>ZombieRool Launcher Error</errTitle>
                             <jre>
-                                <path>%JAVA_HOME%;%PATH%</path>
+                                <path>%JAVA_HOME%</path>
                                 <minVersion>17</minVersion>
                                 <opts>
                                     <opt>-Dfile.encoding=UTF-8</opt>
