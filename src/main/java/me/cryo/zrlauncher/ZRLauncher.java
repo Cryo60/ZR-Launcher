@@ -40,6 +40,11 @@ public class ZRLauncher extends JFrame {
     private JButton btnOfficial, btnCommunity;
     private JLabel lblStatus;
     private JProgressBar globalProgressBar;
+    
+    // Nouveaux éléments pour le chemin
+    private JTextField txtInstallPath;
+    private JLabel lblPath;
+    private JButton btnBrowse;
 
     private boolean showingOfficial = true;
     private JsonObject featuredData = null;
@@ -66,6 +71,8 @@ public class ZRLauncher extends JFrame {
         langEN.put("downloads", "Downloads: ");
         langEN.put("update_avail", "A new version of the launcher is available!");
         langEN.put("update_btn", "Update Now");
+        langEN.put("path", "Install Path:");
+        langEN.put("browse", "Browse...");
 
         langFR.put("title", "ZombieRool Map Downloader v" + CURRENT_VERSION);
         langFR.put("official", "Maps Officielles");
@@ -81,6 +88,8 @@ public class ZRLauncher extends JFrame {
         langFR.put("downloads", "Téléchargements : ");
         langFR.put("update_avail", "Une nouvelle version du launcher est disponible !");
         langFR.put("update_btn", "Mettre à jour");
+        langFR.put("path", "Dossier d'installation :");
+        langFR.put("browse", "Parcourir...");
     }
 
     private String t(String key) {
@@ -135,24 +144,52 @@ public class ZRLauncher extends JFrame {
         scrollPane.setBorder(null);
         add(scrollPane, BorderLayout.CENTER);
 
-        // --- BOTTOM BAR ---
-        JPanel bottomPanel = new JPanel(new BorderLayout(10, 0));
-        bottomPanel.setBorder(new EmptyBorder(10, 20, 10, 20));
+        // --- BOTTOM BAR (Path + Status) ---
+        JPanel bottomContainer = new JPanel(new BorderLayout(0, 10));
+        bottomContainer.setBorder(new EmptyBorder(10, 20, 10, 20));
+
+        // Path Selector
+        JPanel pathPanel = new JPanel(new BorderLayout(10, 0));
+        lblPath = new JLabel(t("path"));
+        txtInstallPath = new JTextField(getMinecraftSavesDir().getAbsolutePath());
+        txtInstallPath.setEditable(false);
+        btnBrowse = new JButton(t("browse"));
         
+        btnBrowse.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser(txtInstallPath.getText());
+            chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                txtInstallPath.setText(chooser.getSelectedFile().getAbsolutePath());
+                // Recharge les maps pour mettre à jour les boutons "Installé" selon le nouveau dossier
+                loadMaps(showingOfficial ? OFFICIAL_JSON_URL : COMMUNITY_JSON_URL);
+            }
+        });
+
+        pathPanel.add(lblPath, BorderLayout.WEST);
+        pathPanel.add(txtInstallPath, BorderLayout.CENTER);
+        pathPanel.add(btnBrowse, BorderLayout.EAST);
+        bottomContainer.add(pathPanel, BorderLayout.NORTH);
+
+        // Status & Progress
+        JPanel statusPanel = new JPanel(new BorderLayout(10, 0));
         lblStatus = new JLabel(t("done"));
         globalProgressBar = new JProgressBar(0, 100);
         globalProgressBar.setStringPainted(true);
         globalProgressBar.setVisible(false);
 
-        bottomPanel.add(lblStatus, BorderLayout.WEST);
-        bottomPanel.add(globalProgressBar, BorderLayout.CENTER);
-        add(bottomPanel, BorderLayout.SOUTH);
+        statusPanel.add(lblStatus, BorderLayout.WEST);
+        statusPanel.add(globalProgressBar, BorderLayout.CENTER);
+        bottomContainer.add(statusPanel, BorderLayout.SOUTH);
+
+        add(bottomContainer, BorderLayout.SOUTH);
     }
 
     private void updateTexts() {
         setTitle(t("title"));
         btnOfficial.setText(t("official"));
         btnCommunity.setText(t("community"));
+        lblPath.setText(t("path"));
+        btnBrowse.setText(t("browse"));
         loadMaps(showingOfficial ? OFFICIAL_JSON_URL : COMMUNITY_JSON_URL);
     }
 
@@ -397,7 +434,8 @@ public class ZRLauncher extends JFrame {
         btnInstall.setFont(new Font("SansSerif", Font.BOLD, 14));
         btnInstall.setCursor(new Cursor(Cursor.HAND_CURSOR));
         
-        File savesDir = getMinecraftSavesDir();
+        // On vérifie si la map existe dans le dossier sélectionné par l'utilisateur
+        File savesDir = new File(txtInstallPath.getText());
         File mapDir = new File(savesDir, name); 
         if (mapDir.exists()) {
             btnInstall.setText(t("installed"));
@@ -418,7 +456,8 @@ public class ZRLauncher extends JFrame {
     private void downloadAndInstallMap(String mapName, String downloadUrl, JButton btn) {
         new Thread(() -> {
             try {
-                File savesDir = getMinecraftSavesDir();
+                // On utilise le dossier sélectionné dans l'interface
+                File savesDir = new File(txtInstallPath.getText());
                 if (!savesDir.exists()) savesDir.mkdirs();
 
                 File tempZip = new File(savesDir, "temp_zr_map.zip");
