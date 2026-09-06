@@ -28,21 +28,20 @@ jobs:
       run: mvn clean package -B
 
     - name: 🛠️ Génération du mini-JRE Windows (jlink)
+      # AJOUT CRUCIAL ICI : jdk.crypto.ec pour autoriser les connexions HTTPS (GitHub)
       run: |
-        jlink --add-modules java.base,java.desktop,java.logging,java.management,java.naming,java.sql,java.xml,jdk.unsupported --output target/jre --strip-debug --no-man-pages --no-header-files --compress=2
+        jlink --add-modules java.base,java.desktop,java.logging,java.management,java.naming,java.sql,java.xml,jdk.unsupported,jdk.crypto.ec --output target/jre --strip-debug --no-man-pages --no-header-files --compress=2
         
     - name: 🏗️ Création de l'Installeur (Inno Setup)
       run: iscc setup.iss
 
-    # --- NOUVEAU : Sauvegarde l'installeur pour que tu puisses le tester ---
     - name: 💾 Upload Artifact (Pour les tests)
       uses: actions/upload-artifact@v4
       with:
         name: ZRLauncher-Setup
         path: target/ZRLauncher-Setup.exe
-        retention-days: 7 # Le fichier restera dispo 7 jours sur GitHub
+        retention-days: 7
 
-    # --- INCHANGÉ : Publie la vraie Release pour les joueurs (uniquement si Tag) ---
     - name: 🚀 Upload Release Asset
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
