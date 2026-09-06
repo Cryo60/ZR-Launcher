@@ -21,7 +21,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0 # 👈 IMPORTANT : Permet au bot de push le JSON plus tard
+        fetch-depth: 0
 
     - name: Set up Java
       uses: actions/setup-java@v4
@@ -60,7 +60,6 @@ jobs:
       with:
         tag_name: ${{ steps.release_check.outputs.tag }}
         name: Release ${{ steps.release_check.outputs.tag }}
-        # 👇 CORRECTION : On upload l'installeur ET le launcher brut
         files: |
           target/ZRLauncher-Setup.exe
           target/ZRLauncher.exe
@@ -81,7 +80,7 @@ jobs:
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
 
-        # Le bot sauvegarde le fichier sur ton repo
+        # Le bot sauvegarde le fichier sur ton repo UNIQUEMENT s'il y a eu un changement
         git add launcher_version.json
-        git commit -m "🤖 Auto-update launcher_version.json to ${{ steps.release_check.outputs.tag }}"
+        git diff --quiet && git diff --staged --quiet || git commit -m "🤖 Auto-update launcher_version.json to ${{ steps.release_check.outputs.tag }}"
         git push
