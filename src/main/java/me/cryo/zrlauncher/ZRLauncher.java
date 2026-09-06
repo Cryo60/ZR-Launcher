@@ -48,7 +48,7 @@ public class ZRLauncher extends JFrame {
     public ZRLauncher() {
         initTranslations();
         setupUI();
-        checkForUpdates(); // Vérifie les MAJ avant de charger les maps
+        checkForUpdates();
     }
 
     private void initTranslations() {
@@ -164,6 +164,7 @@ public class ZRLauncher extends JFrame {
             try {
                 URL url = new URL(UPDATE_JSON_URL + "?t=" + System.currentTimeMillis());
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestProperty("User-Agent", "ZombieRool-Launcher/1.0");
                 InputStreamReader reader = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8);
                 JsonObject json = new Gson().fromJson(reader, JsonObject.class);
                 reader.close();
@@ -177,7 +178,6 @@ public class ZRLauncher extends JFrame {
                     fetchFeaturedAndLoad();
                 }
             } catch (Exception e) {
-                // Si pas d'internet ou erreur, on charge les maps normalement
                 fetchFeaturedAndLoad();
             }
         }).start();
@@ -208,11 +208,12 @@ public class ZRLauncher extends JFrame {
 
                 File currentExe = new File(ZRLauncher.class.getProtectionDomain().getCodeSource().getLocation().toURI());
                 String exeName = currentExe.getName();
-                if (!exeName.endsWith(".exe")) exeName = "ZRLauncher.exe"; // Fallback si lancé en .jar
+                if (!exeName.endsWith(".exe")) exeName = "ZRLauncher.exe";
 
                 File newExe = new File(currentExe.getParentFile(), "ZRLauncher_new.exe");
 
                 HttpURLConnection conn = (HttpURLConnection) new URL(downloadUrl).openConnection();
+                conn.setRequestProperty("User-Agent", "ZombieRool-Launcher/1.0");
                 int fileSize = conn.getContentLength();
                 
                 try (InputStream in = conn.getInputStream();
@@ -228,18 +229,16 @@ public class ZRLauncher extends JFrame {
                     }
                 }
 
-                // Création du script de remplacement
                 File batFile = new File(currentExe.getParentFile(), "update.bat");
                 try (PrintWriter writer = new PrintWriter(batFile)) {
                     writer.println("@echo off");
-                    writer.println("timeout /t 2 /nobreak > NUL"); // Attend 2 sec que le launcher se ferme
+                    writer.println("timeout /t 2 /nobreak > NUL");
                     writer.println("del /f /q \"" + exeName + "\"");
                     writer.println("ren \"ZRLauncher_new.exe\" \"" + exeName + "\"");
                     writer.println("start \"\" \"" + exeName + "\"");
-                    writer.println("del \"%~f0\""); // Le script se supprime lui-même
+                    writer.println("del \"%~f0\"");
                 }
 
-                // Lancement du script et fermeture
                 Runtime.getRuntime().exec("cmd /c start \"\" \"" + batFile.getAbsolutePath() + "\"");
                 System.exit(0);
 
@@ -261,6 +260,7 @@ public class ZRLauncher extends JFrame {
             try {
                 URL url = new URL(FEATURED_JSON_URL + "?t=" + System.currentTimeMillis());
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestProperty("User-Agent", "ZombieRool-Launcher/1.0");
                 InputStreamReader reader = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8);
                 featuredData = new Gson().fromJson(reader, JsonObject.class);
                 reader.close();
@@ -281,6 +281,7 @@ public class ZRLauncher extends JFrame {
             try {
                 URL url = new URL(jsonUrl + "?t=" + System.currentTimeMillis());
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestProperty("User-Agent", "ZombieRool-Launcher/1.0");
                 InputStreamReader reader = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8);
                 JsonObject json = new Gson().fromJson(reader, JsonObject.class);
                 reader.close();
@@ -297,7 +298,6 @@ public class ZRLauncher extends JFrame {
                 SwingUtilities.invokeLater(() -> {
                     mainContentPanel.removeAll();
                     
-                    // 1. Featured Map
                     for (JsonElement elem : mapsArray) {
                         JsonObject mapObj = elem.getAsJsonObject();
                         if (mapObj.get("id").getAsString().equals(finalFeaturedId)) {
@@ -307,7 +307,6 @@ public class ZRLauncher extends JFrame {
                         }
                     }
 
-                    // 2. Other Maps
                     for (JsonElement elem : mapsArray) {
                         JsonObject mapObj = elem.getAsJsonObject();
                         if (!mapObj.get("id").getAsString().equals(finalFeaturedId)) {
@@ -347,7 +346,6 @@ public class ZRLauncher extends JFrame {
         ));
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 160));
 
-        // --- IMAGE ---
         JLabel lblImage = new JLabel();
         lblImage.setPreferredSize(new Dimension(220, 124));
         lblImage.setOpaque(true);
@@ -360,7 +358,9 @@ public class ZRLauncher extends JFrame {
             } else {
                 new Thread(() -> {
                     try {
-                        BufferedImage img = ImageIO.read(new URL(imageUrl));
+                        HttpURLConnection conn = (HttpURLConnection) new URL(imageUrl).openConnection();
+                        conn.setRequestProperty("User-Agent", "ZombieRool-Launcher/1.0");
+                        BufferedImage img = ImageIO.read(conn.getInputStream());
                         Image scaledImg = img.getScaledInstance(220, 124, Image.SCALE_SMOOTH);
                         imageCache.put(id, scaledImg);
                         SwingUtilities.invokeLater(() -> lblImage.setIcon(new ImageIcon(scaledImg)));
@@ -369,7 +369,6 @@ public class ZRLauncher extends JFrame {
             }
         }
 
-        // --- INFOS ---
         JPanel infoPanel = new JPanel();
         infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
         
@@ -392,7 +391,6 @@ public class ZRLauncher extends JFrame {
 
         card.add(infoPanel, BorderLayout.CENTER);
 
-        // --- BOUTON INSTALL ---
         JPanel actionPanel = new JPanel(new GridBagLayout());
         JButton btnInstall = new JButton(t("install"));
         btnInstall.setPreferredSize(new Dimension(130, 40));
@@ -517,7 +515,6 @@ public class ZRLauncher extends JFrame {
     }
 
     public static void main(String[] args) {
-        // Activation du thème Pro FlatLaf
         try {
             FlatDarkLaf.setup();
         } catch (Exception ex) {
