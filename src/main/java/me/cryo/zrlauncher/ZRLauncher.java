@@ -24,7 +24,7 @@ import java.util.zip.ZipInputStream;
 
 public class ZRLauncher extends JFrame {
 
-    // PASSAGE EN VERSION v1.2.
+    // PASSAGE EN VERSION v1.2
     private static final String CURRENT_VERSION = "v1.2";
     
     private static final String UPDATE_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-map-launcher/main/launcher_version.json";
@@ -36,7 +36,6 @@ public class ZRLauncher extends JFrame {
     private final Map<String, String> langEN = new HashMap<>();
     private final Map<String, String> langFR = new HashMap<>();
     
-    // Système de sauvegarde des préférences
     private final Preferences prefs = Preferences.userNodeForPackage(ZRLauncher.class);
 
     private JPanel mainContentPanel;
@@ -60,12 +59,34 @@ public class ZRLauncher extends JFrame {
     private final Color COLOR_BLUE = new Color(88, 166, 255);
 
     public ZRLauncher() {
-        // Charge la langue sauvegardée (par défaut false = Anglais)
         isFrench = prefs.getBoolean("isFrench", false);
-        
         initTranslations();
         setupUI();
         checkForUpdates();
+    }
+
+    // ==========================================
+    // NOUVEAU : FONCTION POUR GÉRER LES REDIRECTIONS GITHUB
+    // ==========================================
+    private HttpURLConnection createConnection(String urlString) throws IOException {
+        HttpURLConnection conn;
+        while (true) {
+            URL url = new URL(urlString);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestProperty("User-Agent", "ZombieRool-Launcher/1.0");
+            conn.setInstanceFollowRedirects(false); // On gère les redirections nous-mêmes
+            
+            int status = conn.getResponseCode();
+            if (status == HttpURLConnection.HTTP_MOVED_TEMP || 
+                status == HttpURLConnection.HTTP_MOVED_PERM || 
+                status == HttpURLConnection.HTTP_SEE_OTHER) {
+                // Si on est redirigé, on récupère le nouveau lien et on recommence
+                urlString = conn.getHeaderField("Location");
+                continue;
+            }
+            break;
+        }
+        return conn;
     }
 
     private void initTranslations() {
@@ -118,7 +139,6 @@ public class ZRLauncher extends JFrame {
         setLayout(new BorderLayout());
         getContentPane().setBackground(COLOR_BG);
 
-        // --- CHARGEMENT DE L'ICÔNE POUR LA BARRE DES TÂCHES ---
         try {
             URL iconURL = ZRLauncher.class.getResource("/icon.png");
             if (iconURL != null) {
@@ -128,7 +148,6 @@ public class ZRLauncher extends JFrame {
             System.err.println("Impossible de charger l'icône.");
         }
 
-        // --- HEADER ---
         JPanel headerPanel = new JPanel(new BorderLayout());
         headerPanel.setBackground(COLOR_BG);
         headerPanel.setBorder(new EmptyBorder(20, 25, 10, 25));
@@ -139,17 +158,16 @@ public class ZRLauncher extends JFrame {
         
         langSelector = new JComboBox<>(new String[]{"English", "Français"});
         langSelector.setPreferredSize(new Dimension(100, 30));
-        langSelector.setSelectedIndex(isFrench ? 1 : 0); // Met la bonne langue au démarrage
+        langSelector.setSelectedIndex(isFrench ? 1 : 0);
         langSelector.addActionListener(e -> {
             isFrench = langSelector.getSelectedIndex() == 1;
-            prefs.putBoolean("isFrench", isFrench); // Sauvegarde le choix
+            prefs.putBoolean("isFrench", isFrench);
             updateTexts();
         });
 
         headerPanel.add(lblMainTitle, BorderLayout.WEST);
         headerPanel.add(langSelector, BorderLayout.EAST);
 
-        // --- TABS ---
         JPanel tabsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
         tabsPanel.setBackground(COLOR_BG);
         tabsPanel.setBorder(new EmptyBorder(0, 20, 15, 20));
@@ -179,7 +197,6 @@ public class ZRLauncher extends JFrame {
         topContainer.add(tabsPanel, BorderLayout.SOUTH);
         add(topContainer, BorderLayout.NORTH);
 
-        // --- MAPS LIST ---
         mainContentPanel = new JPanel();
         mainContentPanel.setLayout(new BoxLayout(mainContentPanel, BoxLayout.Y_AXIS));
         mainContentPanel.setBackground(COLOR_BG);
@@ -192,7 +209,6 @@ public class ZRLauncher extends JFrame {
         scrollPane.getViewport().setBackground(COLOR_BG);
         add(scrollPane, BorderLayout.CENTER);
 
-        // --- BOTTOM BAR ---
         JPanel bottomContainer = new JPanel(new BorderLayout(0, 15));
         bottomContainer.setBackground(new Color(25, 27, 30));
         bottomContainer.setBorder(new EmptyBorder(15, 25, 15, 25));
@@ -274,9 +290,7 @@ public class ZRLauncher extends JFrame {
     private void checkForUpdates() {
         new Thread(() -> {
             try {
-                URL url = new URL(UPDATE_JSON_URL + "?t=" + System.currentTimeMillis());
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestProperty("User-Agent", "ZombieRool-Launcher/1.0");
+                HttpURLConnection conn = createConnection(UPDATE_JSON_URL + "?t=" + System.currentTimeMillis());
                 InputStreamReader reader = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8);
                 JsonObject json = new Gson().fromJson(reader, JsonObject.class);
                 reader.close();
@@ -331,8 +345,8 @@ public class ZRLauncher extends JFrame {
 
                 File newExe = new File(currentExe.getParentFile(), "ZRLauncher_new.exe");
 
-                HttpURLConnection conn = (HttpURLConnection) new URL(downloadUrl).openConnection();
-                conn.setRequestProperty("User-Agent", "ZombieRool-Launcher/1.0");
+                // UTILISATION DE LA NOUVELLE FONCTION ICI
+                HttpURLConnection conn = createConnection(downloadUrl);
                 int fileSize = conn.getContentLength();
                 
                 try (InputStream in = conn.getInputStream();
@@ -375,6 +389,7 @@ public class ZRLauncher extends JFrame {
                     globalProgressBar.setVisible(false);
                     fetchFeaturedAndLoad();
                 });
+                e.printStackTrace();
             }
         }).start();
     }
@@ -382,9 +397,7 @@ public class ZRLauncher extends JFrame {
     private void fetchFeaturedAndLoad() {
         new Thread(() -> {
             try {
-                URL url = new URL(FEATURED_JSON_URL + "?t=" + System.currentTimeMillis());
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestProperty("User-Agent", "ZombieRool-Launcher/1.0");
+                HttpURLConnection conn = createConnection(FEATURED_JSON_URL + "?t=" + System.currentTimeMillis());
                 InputStreamReader reader = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8);
                 featuredData = new Gson().fromJson(reader, JsonObject.class);
                 reader.close();
@@ -404,9 +417,7 @@ public class ZRLauncher extends JFrame {
 
         new Thread(() -> {
             try {
-                URL url = new URL(jsonUrl + "?t=" + System.currentTimeMillis());
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestProperty("User-Agent", "ZombieRool-Launcher/1.0");
+                HttpURLConnection conn = createConnection(jsonUrl + "?t=" + System.currentTimeMillis());
                 InputStreamReader reader = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8);
                 JsonObject json = new Gson().fromJson(reader, JsonObject.class);
                 reader.close();
@@ -494,8 +505,7 @@ public class ZRLauncher extends JFrame {
             } else {
                 new Thread(() -> {
                     try {
-                        HttpURLConnection conn = (HttpURLConnection) new URL(imageUrl).openConnection();
-                        conn.setRequestProperty("User-Agent", "ZombieRool-Launcher/1.0");
+                        HttpURLConnection conn = createConnection(imageUrl);
                         BufferedImage img = ImageIO.read(conn.getInputStream());
                         Image scaledImg = img.getScaledInstance(220, 124, Image.SCALE_SMOOTH);
                         imageCache.put(id, scaledImg);
@@ -581,8 +591,8 @@ public class ZRLauncher extends JFrame {
                     globalProgressBar.setValue(0);
                 });
                 
-                HttpURLConnection conn = (HttpURLConnection) new URL(downloadUrl).openConnection();
-                conn.setRequestProperty("User-Agent", "ZombieRool-Launcher/1.0");
+                // UTILISATION DE LA NOUVELLE FONCTION ICI AUSSI
+                HttpURLConnection conn = createConnection(downloadUrl);
                 int fileSize = conn.getContentLength();
                 
                 try (InputStream in = conn.getInputStream();
@@ -677,7 +687,6 @@ public class ZRLauncher extends JFrame {
     }
 
     public static void main(String[] args) {
-        // --- LECTURE DE LA LANGUE DE L'INSTALLEUR ---
         if (args.length > 0) {
             Preferences prefs = Preferences.userNodeForPackage(ZRLauncher.class);
             if (args[0].equalsIgnoreCase("french")) {
