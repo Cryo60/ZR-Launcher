@@ -23,6 +23,7 @@ import java.util.zip.ZipInputStream;
 
 public class ZRLauncher extends JFrame {
 
+    // PASSAGE EN VERSION 1.1
     private static final String CURRENT_VERSION = "1.1";
     
     // URLs
@@ -77,6 +78,7 @@ public class ZRLauncher extends JFrame {
         langEN.put("downloads", "Downloads: ");
         langEN.put("update_avail", "A new version of the launcher is available!");
         langEN.put("update_btn", "Update Now");
+        langEN.put("update_later", "Later");
         langEN.put("path", "Install Path:");
         langEN.put("browse", "Browse...");
 
@@ -94,6 +96,7 @@ public class ZRLauncher extends JFrame {
         langFR.put("downloads", "Téléchargements : ");
         langFR.put("update_avail", "Une nouvelle version du launcher est disponible !");
         langFR.put("update_btn", "Mettre à jour");
+        langFR.put("update_later", "Plus tard");
         langFR.put("path", "Dossier d'installation :");
         langFR.put("browse", "Parcourir...");
     }
@@ -115,7 +118,8 @@ public class ZRLauncher extends JFrame {
         headerPanel.setBackground(COLOR_BG);
         headerPanel.setBorder(new EmptyBorder(20, 25, 10, 25));
 
-        JLabel lblMainTitle = new JLabel("ZOMBIEROOL");
+        // AJOUT DU "by Cryo60" ICI
+        JLabel lblMainTitle = new JLabel("<html>ZOMBIEROOL <span style='font-size:16px; color:#888888; font-style:italic;'>by Cryo60</span></html>");
         lblMainTitle.setFont(new Font("SansSerif", Font.BOLD, 32));
         lblMainTitle.setForeground(COLOR_ACCENT);
         
@@ -164,7 +168,6 @@ public class ZRLauncher extends JFrame {
         mainContentPanel = new JPanel();
         mainContentPanel.setLayout(new BoxLayout(mainContentPanel, BoxLayout.Y_AXIS));
         mainContentPanel.setBackground(COLOR_BG);
-        // FIX SCROLL : On ajoute un gros padding en bas (40px) pour ne pas couper la dernière map
         mainContentPanel.setBorder(new EmptyBorder(10, 25, 40, 25));
         
         JScrollPane scrollPane = new JScrollPane(mainContentPanel);
@@ -283,13 +286,19 @@ public class ZRLauncher extends JFrame {
     }
 
     private void showUpdateDialog(String newVersion, String downloadUrl) {
-        int response = JOptionPane.showConfirmDialog(this,
+        // FIX DES BOUTONS : On force le texte selon la langue choisie dans l'appli
+        String[] options = { t("update_btn"), t("update_later") };
+        
+        int response = JOptionPane.showOptionDialog(this,
                 t("update_avail") + "\nVersion: " + newVersion,
                 isFrench ? "Mise à jour" : "Update",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.INFORMATION_MESSAGE);
+                JOptionPane.DEFAULT_OPTION,
+                JOptionPane.INFORMATION_MESSAGE,
+                null,
+                options,
+                options[0]);
 
-        if (response == JOptionPane.YES_OPTION) {
+        if (response == 0) { // 0 correspond au premier bouton (Mettre à jour)
             performUpdate(downloadUrl);
         } else {
             fetchFeaturedAndLoad();
@@ -415,7 +424,6 @@ public class ZRLauncher extends JFrame {
                         }
                     }
                     
-                    // FIX SCROLL : Ajout d'un espace vide à la toute fin pour être sûr que rien n'est coupé
                     mainContentPanel.add(Box.createVerticalStrut(20));
                     
                     mainContentPanel.revalidate();
@@ -447,7 +455,6 @@ public class ZRLauncher extends JFrame {
         JPanel card = new JPanel(new BorderLayout(20, 0));
         card.setBackground(COLOR_CARD);
         
-        // Bordure d'accentuation sur la gauche (Dorée ou Grise)
         Color leftBorderColor = isFeatured ? COLOR_ACCENT : new Color(80, 85, 90);
         card.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 5, 0, 0, leftBorderColor),
@@ -652,7 +659,6 @@ public class ZRLauncher extends JFrame {
 
     public static void main(String[] args) {
         try {
-            // Configuration de FlatLaf pour un look très moderne
             UIManager.put("Button.arc", 10);
             UIManager.put("Component.arc", 10);
             UIManager.put("ProgressBar.arc", 10);
