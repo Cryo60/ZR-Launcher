@@ -6,7 +6,7 @@ on:
     tags: [ "v*" ] # Déclenche aussi quand tu crées une version (ex: v1.0)
   workflow_dispatch:
 
-# Autorisation obligatoire pour que le bot puisse publier la Release sur la page GitHub
+# Autorisation obligatoire pour que le bot puisse publier la Release
 permissions:
   contents: write
 
@@ -26,9 +26,34 @@ jobs:
         cache: maven
         
     - name: 📦 Build EXE with Maven
-      # Attention: on met la compilation AVANT de créer le JRE, car "clean" supprime le dossier target
       run: mvn clean package -B
 
     - name: 🛠️ Génération du mini-JRE Windows (jlink)
       run: |
-        # On utili
+        & "$env:JAVA_HOME\bin\jlink.exe" --no-header-files --no-man-pages --compress=2 --strip-debug --add-modules java.base,java.desktop,java.logging,java.xml,jdk.unsupported --output target/jre
+      
+    - name: 🗜️ Création du dossier et du ZIP
+      run: |
+        New-Item -ItemType Directory -Force -Path release_folder
+        Copy-Item target\ZRLauncher.exe release_folder\
+        Copy-Item target\jre release_folder\jre -Recurse
+        Compress-Archive -Path release_folder\* -DestinationPath ZRLauncher-Windows.zip
+
+    - name: 💾 Upload Artifact (Pour tester)
+      uses: actions/upload-artifact@v4
+      with:
+        name: ZRLauncher-App
+        path: ZRLauncher-Windows.zip
+
+    - name: 🚀 Création de la Release GitHub
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v2
+      with:
+        # On upload le ZIP pour les joueurs, ET le EXE pour ton auto-updater !
+        files: |
+          ZRLauncher-Windows.zip
+          target/ZRLauncher.exe
+        name: ZombieRool Launcher ${{ github.ref_name }}
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
