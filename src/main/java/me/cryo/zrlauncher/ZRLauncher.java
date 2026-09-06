@@ -186,7 +186,7 @@ public class ZRLauncher extends JFrame {
     private void showUpdateDialog(String newVersion, String downloadUrl) {
         int response = JOptionPane.showConfirmDialog(this,
                 t("update_avail") + "\nVersion: " + newVersion,
-                "Mise à jour / Update",
+                isFrench ? "Mise à jour" : "Update",
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.INFORMATION_MESSAGE);
 
