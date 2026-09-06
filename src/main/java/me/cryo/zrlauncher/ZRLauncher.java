@@ -23,7 +23,7 @@ import java.util.zip.ZipInputStream;
 
 public class ZRLauncher extends JFrame {
 
-    private static final String CURRENT_VERSION = "1.0";
+    private static final String CURRENT_VERSION = "1.1";
     
     // URLs
     private static final String UPDATE_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-maps/main/launcher_version.json";
@@ -41,7 +41,6 @@ public class ZRLauncher extends JFrame {
     private JLabel lblStatus;
     private JProgressBar globalProgressBar;
     
-    // Nouveaux éléments pour le chemin
     private JTextField txtInstallPath;
     private JLabel lblPath;
     private JButton btnBrowse;
@@ -50,6 +49,13 @@ public class ZRLauncher extends JFrame {
     private JsonObject featuredData = null;
     private final Map<String, Image> imageCache = new HashMap<>();
 
+    // Couleurs du thème
+    private final Color COLOR_BG = new Color(30, 33, 36);
+    private final Color COLOR_CARD = new Color(43, 47, 51);
+    private final Color COLOR_ACCENT = new Color(234, 179, 8); // Doré
+    private final Color COLOR_GREEN = new Color(46, 160, 67);
+    private final Color COLOR_BLUE = new Color(88, 166, 255);
+
     public ZRLauncher() {
         initTranslations();
         setupUI();
@@ -57,7 +63,7 @@ public class ZRLauncher extends JFrame {
     }
 
     private void initTranslations() {
-        langEN.put("title", "ZombieRool Map Downloader v" + CURRENT_VERSION);
+        langEN.put("title", "ZombieRool Launcher v" + CURRENT_VERSION);
         langEN.put("official", "Official Maps");
         langEN.put("community", "Community Maps");
         langEN.put("install", "Install");
@@ -67,14 +73,14 @@ public class ZRLauncher extends JFrame {
         langEN.put("done", "Ready.");
         langEN.put("error", "Error: ");
         langEN.put("loading", "Loading maps...");
-        langEN.put("featured", "⭐ FEATURED MAP ⭐");
+        langEN.put("featured", "⭐ FEATURED MAP");
         langEN.put("downloads", "Downloads: ");
         langEN.put("update_avail", "A new version of the launcher is available!");
         langEN.put("update_btn", "Update Now");
         langEN.put("path", "Install Path:");
         langEN.put("browse", "Browse...");
 
-        langFR.put("title", "ZombieRool Map Downloader v" + CURRENT_VERSION);
+        langFR.put("title", "ZombieRool Launcher v" + CURRENT_VERSION);
         langFR.put("official", "Maps Officielles");
         langFR.put("community", "Maps Communautaires");
         langFR.put("install", "Installer");
@@ -84,7 +90,7 @@ public class ZRLauncher extends JFrame {
         langFR.put("done", "Prêt.");
         langFR.put("error", "Erreur : ");
         langFR.put("loading", "Chargement des maps...");
-        langFR.put("featured", "⭐ MAP À LA UNE ⭐");
+        langFR.put("featured", "⭐ MAP À LA UNE");
         langFR.put("downloads", "Téléchargements : ");
         langFR.put("update_avail", "Une nouvelle version du launcher est disponible !");
         langFR.put("update_btn", "Mettre à jour");
@@ -98,69 +104,103 @@ public class ZRLauncher extends JFrame {
 
     private void setupUI() {
         setTitle(t("title"));
-        setSize(950, 700);
+        setSize(1000, 750);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
+        getContentPane().setBackground(COLOR_BG);
 
-        // --- TOP BAR ---
-        JPanel topPanel = new JPanel(new BorderLayout());
-        topPanel.setBorder(new EmptyBorder(15, 20, 15, 20));
+        // --- HEADER (Titre + Langue) ---
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.setBackground(COLOR_BG);
+        headerPanel.setBorder(new EmptyBorder(20, 25, 10, 25));
 
-        JPanel tabsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
-        btnOfficial = new JButton(t("official"));
-        btnCommunity = new JButton(t("community"));
+        JLabel lblMainTitle = new JLabel("ZOMBIEROOL");
+        lblMainTitle.setFont(new Font("SansSerif", Font.BOLD, 32));
+        lblMainTitle.setForeground(COLOR_ACCENT);
         
-        btnOfficial.addActionListener(e -> {
-            showingOfficial = true;
-            loadMaps(OFFICIAL_JSON_URL);
-        });
-        
-        btnCommunity.addActionListener(e -> {
-            showingOfficial = false;
-            loadMaps(COMMUNITY_JSON_URL);
-        });
-
-        tabsPanel.add(btnOfficial);
-        tabsPanel.add(btnCommunity);
-
         langSelector = new JComboBox<>(new String[]{"English", "Français"});
+        langSelector.setPreferredSize(new Dimension(100, 30));
         langSelector.addActionListener(e -> {
             isFrench = langSelector.getSelectedIndex() == 1;
             updateTexts();
         });
 
-        topPanel.add(tabsPanel, BorderLayout.WEST);
-        topPanel.add(langSelector, BorderLayout.EAST);
-        add(topPanel, BorderLayout.NORTH);
+        headerPanel.add(lblMainTitle, BorderLayout.WEST);
+        headerPanel.add(langSelector, BorderLayout.EAST);
+
+        // --- TABS (Onglets) ---
+        JPanel tabsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
+        tabsPanel.setBackground(COLOR_BG);
+        tabsPanel.setBorder(new EmptyBorder(0, 20, 15, 20));
+
+        btnOfficial = createTabButton(t("official"));
+        btnCommunity = createTabButton(t("community"));
+        
+        btnOfficial.addActionListener(e -> {
+            showingOfficial = true;
+            updateTabStyles();
+            loadMaps(OFFICIAL_JSON_URL);
+        });
+        
+        btnCommunity.addActionListener(e -> {
+            showingOfficial = false;
+            updateTabStyles();
+            loadMaps(COMMUNITY_JSON_URL);
+        });
+
+        tabsPanel.add(btnOfficial);
+        tabsPanel.add(btnCommunity);
+        updateTabStyles();
+
+        // Conteneur Haut
+        JPanel topContainer = new JPanel(new BorderLayout());
+        topContainer.setBackground(COLOR_BG);
+        topContainer.add(headerPanel, BorderLayout.NORTH);
+        topContainer.add(tabsPanel, BorderLayout.SOUTH);
+        add(topContainer, BorderLayout.NORTH);
 
         // --- MAPS LIST ---
         mainContentPanel = new JPanel();
         mainContentPanel.setLayout(new BoxLayout(mainContentPanel, BoxLayout.Y_AXIS));
-        mainContentPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        mainContentPanel.setBackground(COLOR_BG);
+        // FIX SCROLL : On ajoute un gros padding en bas (40px) pour ne pas couper la dernière map
+        mainContentPanel.setBorder(new EmptyBorder(10, 25, 40, 25));
         
         JScrollPane scrollPane = new JScrollPane(mainContentPanel);
         scrollPane.getVerticalScrollBar().setUnitIncrement(20);
         scrollPane.setBorder(null);
+        scrollPane.setBackground(COLOR_BG);
+        scrollPane.getViewport().setBackground(COLOR_BG);
         add(scrollPane, BorderLayout.CENTER);
 
         // --- BOTTOM BAR (Path + Status) ---
-        JPanel bottomContainer = new JPanel(new BorderLayout(0, 10));
-        bottomContainer.setBorder(new EmptyBorder(10, 20, 10, 20));
+        JPanel bottomContainer = new JPanel(new BorderLayout(0, 15));
+        bottomContainer.setBackground(new Color(25, 27, 30));
+        bottomContainer.setBorder(new EmptyBorder(15, 25, 15, 25));
 
         // Path Selector
         JPanel pathPanel = new JPanel(new BorderLayout(10, 0));
+        pathPanel.setOpaque(false);
         lblPath = new JLabel(t("path"));
+        lblPath.setForeground(new Color(180, 180, 180));
+        
         txtInstallPath = new JTextField(getMinecraftSavesDir().getAbsolutePath());
         txtInstallPath.setEditable(false);
-        btnBrowse = new JButton(t("browse"));
+        txtInstallPath.setBackground(new Color(40, 44, 48));
+        txtInstallPath.setForeground(Color.WHITE);
+        txtInstallPath.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(60, 60, 60)),
+                new EmptyBorder(5, 10, 5, 10)
+        ));
         
+        btnBrowse = new JButton(t("browse"));
+        btnBrowse.setCursor(new Cursor(Cursor.HAND_CURSOR));
         btnBrowse.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser(txtInstallPath.getText());
             chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
             if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
                 txtInstallPath.setText(chooser.getSelectedFile().getAbsolutePath());
-                // Recharge les maps pour mettre à jour les boutons "Installé" selon le nouveau dossier
                 loadMaps(showingOfficial ? OFFICIAL_JSON_URL : COMMUNITY_JSON_URL);
             }
         });
@@ -171,17 +211,39 @@ public class ZRLauncher extends JFrame {
         bottomContainer.add(pathPanel, BorderLayout.NORTH);
 
         // Status & Progress
-        JPanel statusPanel = new JPanel(new BorderLayout(10, 0));
+        JPanel statusPanel = new JPanel(new BorderLayout(15, 0));
+        statusPanel.setOpaque(false);
         lblStatus = new JLabel(t("done"));
+        lblStatus.setFont(new Font("SansSerif", Font.BOLD, 13));
+        lblStatus.setForeground(new Color(200, 200, 200));
+        
         globalProgressBar = new JProgressBar(0, 100);
         globalProgressBar.setStringPainted(true);
         globalProgressBar.setVisible(false);
+        globalProgressBar.setPreferredSize(new Dimension(100, 22));
 
         statusPanel.add(lblStatus, BorderLayout.WEST);
         statusPanel.add(globalProgressBar, BorderLayout.CENTER);
         bottomContainer.add(statusPanel, BorderLayout.SOUTH);
 
         add(bottomContainer, BorderLayout.SOUTH);
+    }
+
+    private JButton createTabButton(String text) {
+        JButton btn = new JButton(text);
+        btn.setFont(new Font("SansSerif", Font.BOLD, 14));
+        btn.setPreferredSize(new Dimension(180, 40));
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.setFocusPainted(false);
+        return btn;
+    }
+
+    private void updateTabStyles() {
+        btnOfficial.setBackground(showingOfficial ? COLOR_BLUE : COLOR_CARD);
+        btnOfficial.setForeground(showingOfficial ? Color.WHITE : new Color(180, 180, 180));
+        
+        btnCommunity.setBackground(!showingOfficial ? COLOR_BLUE : COLOR_CARD);
+        btnCommunity.setForeground(!showingOfficial ? Color.WHITE : new Color(180, 180, 180));
     }
 
     private void updateTexts() {
@@ -310,6 +372,7 @@ public class ZRLauncher extends JFrame {
         mainContentPanel.removeAll();
         JLabel loadingLabel = new JLabel(t("loading"));
         loadingLabel.setFont(new Font("SansSerif", Font.BOLD, 16));
+        loadingLabel.setForeground(Color.WHITE);
         mainContentPanel.add(loadingLabel);
         mainContentPanel.revalidate();
         mainContentPanel.repaint();
@@ -339,7 +402,7 @@ public class ZRLauncher extends JFrame {
                         JsonObject mapObj = elem.getAsJsonObject();
                         if (mapObj.get("id").getAsString().equals(finalFeaturedId)) {
                             mainContentPanel.add(createMapCard(mapObj, true));
-                            mainContentPanel.add(Box.createVerticalStrut(10));
+                            mainContentPanel.add(Box.createVerticalStrut(15));
                             break;
                         }
                     }
@@ -348,9 +411,12 @@ public class ZRLauncher extends JFrame {
                         JsonObject mapObj = elem.getAsJsonObject();
                         if (!mapObj.get("id").getAsString().equals(finalFeaturedId)) {
                             mainContentPanel.add(createMapCard(mapObj, false));
-                            mainContentPanel.add(Box.createVerticalStrut(10));
+                            mainContentPanel.add(Box.createVerticalStrut(15));
                         }
                     }
+                    
+                    // FIX SCROLL : Ajout d'un espace vide à la toute fin pour être sûr que rien n'est coupé
+                    mainContentPanel.add(Box.createVerticalStrut(20));
                     
                     mainContentPanel.revalidate();
                     mainContentPanel.repaint();
@@ -359,7 +425,9 @@ public class ZRLauncher extends JFrame {
             } catch (Exception e) {
                 SwingUtilities.invokeLater(() -> {
                     mainContentPanel.removeAll();
-                    mainContentPanel.add(new JLabel(t("error") + e.getMessage()));
+                    JLabel errLabel = new JLabel(t("error") + e.getMessage());
+                    errLabel.setForeground(new Color(255, 85, 85));
+                    mainContentPanel.add(errLabel);
                     mainContentPanel.revalidate();
                     mainContentPanel.repaint();
                 });
@@ -376,21 +444,30 @@ public class ZRLauncher extends JFrame {
         String imageUrl = mapData.has("image_url") ? mapData.get("image_url").getAsString() : "";
         int downloads = mapData.has("downloads") ? mapData.get("downloads").getAsInt() : 0;
 
-        JPanel card = new JPanel(new BorderLayout(15, 0));
+        JPanel card = new JPanel(new BorderLayout(20, 0));
+        card.setBackground(COLOR_CARD);
+        
+        // Bordure d'accentuation sur la gauche (Dorée ou Grise)
+        Color leftBorderColor = isFeatured ? COLOR_ACCENT : new Color(80, 85, 90);
         card.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(isFeatured ? new Color(234, 179, 8) : new Color(80, 80, 80), isFeatured ? 2 : 1, true),
-                new EmptyBorder(15, 15, 15, 15)
+                BorderFactory.createMatteBorder(0, 5, 0, 0, leftBorderColor),
+                new EmptyBorder(15, 15, 15, 20)
         ));
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 160));
 
+        // --- IMAGE ---
         JLabel lblImage = new JLabel();
         lblImage.setPreferredSize(new Dimension(220, 124));
         lblImage.setOpaque(true);
-        lblImage.setBackground(Color.BLACK);
+        lblImage.setBackground(new Color(20, 22, 25));
+        lblImage.setHorizontalAlignment(SwingConstants.CENTER);
+        lblImage.setText("No Image");
+        lblImage.setForeground(new Color(100, 100, 100));
         card.add(lblImage, BorderLayout.WEST);
 
         if (!imageUrl.isEmpty()) {
             if (imageCache.containsKey(id)) {
+                lblImage.setText("");
                 lblImage.setIcon(new ImageIcon(imageCache.get(id)));
             } else {
                 new Thread(() -> {
@@ -400,50 +477,66 @@ public class ZRLauncher extends JFrame {
                         BufferedImage img = ImageIO.read(conn.getInputStream());
                         Image scaledImg = img.getScaledInstance(220, 124, Image.SCALE_SMOOTH);
                         imageCache.put(id, scaledImg);
-                        SwingUtilities.invokeLater(() -> lblImage.setIcon(new ImageIcon(scaledImg)));
+                        SwingUtilities.invokeLater(() -> {
+                            lblImage.setText("");
+                            lblImage.setIcon(new ImageIcon(scaledImg));
+                        });
                     } catch (Exception ignored) {}
                 }).start();
             }
         }
 
+        // --- INFOS ---
         JPanel infoPanel = new JPanel();
         infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
+        infoPanel.setOpaque(false);
         
         if (isFeatured) {
             JLabel lblFeatured = new JLabel(t("featured"));
-            lblFeatured.setForeground(new Color(234, 179, 8));
+            lblFeatured.setForeground(COLOR_ACCENT);
             lblFeatured.setFont(new Font("SansSerif", Font.BOLD, 12));
             infoPanel.add(lblFeatured);
+            infoPanel.add(Box.createVerticalStrut(3));
         }
 
-        JLabel lblName = new JLabel("<html><span style='font-size:16px; font-weight:bold;'>" + name + "</span> <span style='color:#aaaaaa'>by " + author + "</span></html>");
-        JLabel lblDesc = new JLabel("<html><p style='width:350px; color:#cccccc'>" + desc.replace("\n", "<br>") + "</p></html>");
-        JLabel lblStats = new JLabel("<html><span style='color:#888888'>" + t("downloads") + downloads + "</span></html>");
+        JLabel lblName = new JLabel("<html><span style='font-size:18px; font-weight:bold; color:white;'>" + name + "</span> <span style='font-size:13px; color:#aaaaaa'>by " + author + "</span></html>");
+        JLabel lblDesc = new JLabel("<html><p style='width:400px; font-size:13px; color:#cccccc; margin-top:5px;'>" + desc.replace("\n", "<br>") + "</p></html>");
+        JLabel lblStats = new JLabel("<html><span style='font-size:12px; color:#888888'>" + t("downloads") + downloads + "</span></html>");
         
         infoPanel.add(lblName);
-        infoPanel.add(Box.createVerticalStrut(5));
         infoPanel.add(lblDesc);
         infoPanel.add(Box.createVerticalGlue());
         infoPanel.add(lblStats);
 
         card.add(infoPanel, BorderLayout.CENTER);
 
+        // --- BOUTON INSTALL ---
         JPanel actionPanel = new JPanel(new GridBagLayout());
-        JButton btnInstall = new JButton(t("install"));
-        btnInstall.setPreferredSize(new Dimension(130, 40));
-        btnInstall.setFont(new Font("SansSerif", Font.BOLD, 14));
-        btnInstall.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        actionPanel.setOpaque(false);
         
-        // On vérifie si la map existe dans le dossier sélectionné par l'utilisateur
+        JButton btnInstall = new JButton(t("install"));
+        btnInstall.setPreferredSize(new Dimension(140, 45));
+        btnInstall.setFont(new Font("SansSerif", Font.BOLD, 15));
+        btnInstall.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btnInstall.setFocusPainted(false);
+        
         File savesDir = new File(txtInstallPath.getText());
         File mapDir = new File(savesDir, name); 
+        
         if (mapDir.exists()) {
             btnInstall.setText(t("installed"));
+            btnInstall.setBackground(new Color(70, 75, 80));
+            btnInstall.setForeground(new Color(150, 150, 150));
             btnInstall.setEnabled(false);
+        } else {
+            btnInstall.setBackground(COLOR_GREEN);
+            btnInstall.setForeground(Color.WHITE);
         }
 
         btnInstall.addActionListener(e -> {
             btnInstall.setEnabled(false);
+            btnInstall.setBackground(new Color(70, 75, 80));
+            btnInstall.setForeground(new Color(150, 150, 150));
             downloadAndInstallMap(name, downloadUrl, btnInstall);
         });
 
@@ -456,7 +549,6 @@ public class ZRLauncher extends JFrame {
     private void downloadAndInstallMap(String mapName, String downloadUrl, JButton btn) {
         new Thread(() -> {
             try {
-                // On utilise le dossier sélectionné dans l'interface
                 File savesDir = new File(txtInstallPath.getText());
                 if (!savesDir.exists()) savesDir.mkdirs();
 
@@ -464,6 +556,7 @@ public class ZRLauncher extends JFrame {
 
                 SwingUtilities.invokeLater(() -> {
                     lblStatus.setText(t("downloading") + " " + mapName);
+                    lblStatus.setForeground(COLOR_BLUE);
                     globalProgressBar.setVisible(true);
                     globalProgressBar.setValue(0);
                 });
@@ -497,6 +590,7 @@ public class ZRLauncher extends JFrame {
 
                 SwingUtilities.invokeLater(() -> {
                     lblStatus.setText(t("done"));
+                    lblStatus.setForeground(COLOR_GREEN);
                     globalProgressBar.setIndeterminate(false);
                     globalProgressBar.setVisible(false);
                     btn.setText(t("installed"));
@@ -505,8 +599,11 @@ public class ZRLauncher extends JFrame {
             } catch (Exception e) {
                 SwingUtilities.invokeLater(() -> {
                     lblStatus.setText(t("error") + e.getMessage());
+                    lblStatus.setForeground(new Color(255, 85, 85));
                     globalProgressBar.setVisible(false);
                     btn.setEnabled(true);
+                    btn.setBackground(COLOR_GREEN);
+                    btn.setForeground(Color.WHITE);
                 });
                 e.printStackTrace();
             }
@@ -555,6 +652,14 @@ public class ZRLauncher extends JFrame {
 
     public static void main(String[] args) {
         try {
+            // Configuration de FlatLaf pour un look très moderne
+            UIManager.put("Button.arc", 10);
+            UIManager.put("Component.arc", 10);
+            UIManager.put("ProgressBar.arc", 10);
+            UIManager.put("ScrollBar.thumbArc", 999);
+            UIManager.put("ScrollBar.thumbInsets", new Insets(2, 2, 2, 2));
+            UIManager.put("TabbedPane.showTabSeparators", true);
+            
             FlatDarkLaf.setup();
         } catch (Exception ex) {
             System.err.println("Failed to initialize LaF");
