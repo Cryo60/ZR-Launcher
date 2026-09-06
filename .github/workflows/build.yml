@@ -29,16 +29,21 @@ jobs:
 
     - name: 🛠️ Génération du mini-JRE Windows (jlink)
       run: |
-        # jlink crée un JRE sur mesure contenant uniquement ce dont ton app a besoin (Swing, etc.)
-        # Cela réduit drastiquement la taille par rapport à un JRE complet.
         jlink --add-modules java.base,java.desktop,java.logging,java.management,java.naming,java.sql,java.xml,jdk.unsupported --output target/jre --strip-debug --no-man-pages --no-header-files --compress=2
         
     - name: 🏗️ Création de l'Installeur (Inno Setup)
-      # iscc est le compilateur d'Inno Setup, pré-installé sur les serveurs Windows de GitHub
       run: iscc setup.iss
 
+    # --- NOUVEAU : Sauvegarde l'installeur pour que tu puisses le tester ---
+    - name: 💾 Upload Artifact (Pour les tests)
+      uses: actions/upload-artifact@v4
+      with:
+        name: ZRLauncher-Setup
+        path: target/ZRLauncher-Setup.exe
+        retention-days: 7 # Le fichier restera dispo 7 jours sur GitHub
+
+    # --- INCHANGÉ : Publie la vraie Release pour les joueurs (uniquement si Tag) ---
     - name: 🚀 Upload Release Asset
-      # Cette étape ne s'exécute que si tu crées un Tag (ex: v1.0)
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
