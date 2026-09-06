@@ -9,6 +9,8 @@ import com.google.gson.JsonObject;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
@@ -16,16 +18,18 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.List;
 import java.util.prefs.Preferences;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 public class ZRLauncher extends JFrame {
 
-    // PASSAGE EN VERSION v1.2
-    private static final String CURRENT_VERSION = "v1.2";
+    // PASSAGE EN VERSION v1.3
+    private static final String CURRENT_VERSION = "v1.3";
     
     private static final String UPDATE_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-map-launcher/main/launcher_version.json";
     private static final String OFFICIAL_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-maps/main/maps.json";
@@ -37,12 +41,20 @@ public class ZRLauncher extends JFrame {
     private final Map<String, String> langFR = new HashMap<>();
     
     private final Preferences prefs = Preferences.userNodeForPackage(ZRLauncher.class);
+    private final Set<String> favoriteCreators = new HashSet<>();
 
     private JPanel mainContentPanel;
+    private JScrollPane scrollPane;
     private JComboBox<String> langSelector;
     private JButton btnOfficial, btnCommunity;
     private JLabel lblStatus;
     private JProgressBar globalProgressBar;
+    
+    // Nouveaux éléments UI pour la recherche et le tri
+    private JTextField txtSearch;
+    private JComboBox<String> cbSort;
+    private JCheckBox chkFavorites;
+    private boolean isUpdatingUI = false;
     
     private JTextField txtInstallPath;
     private JLabel lblPath;
@@ -50,6 +62,9 @@ public class ZRLauncher extends JFrame {
 
     private boolean showingOfficial = true;
     private JsonObject featuredData = null;
+    private List<JsonObject> currentMaps = new ArrayList<>();
+    private int sortIndex = 0;
+    
     private final Map<String, Image> imageCache = new HashMap<>();
 
     private final Color COLOR_BG = new Color(30, 33, 36);
@@ -60,27 +75,35 @@ public class ZRLauncher extends JFrame {
 
     public ZRLauncher() {
         isFrench = prefs.getBoolean("isFrench", false);
+        loadFavorites();
         initTranslations();
         setupUI();
         checkForUpdates();
     }
 
-    // ==========================================
-    // NOUVEAU : FONCTION POUR GÉRER LES REDIRECTIONS GITHUB
-    // ==========================================
+    private void loadFavorites() {
+        String favs = prefs.get("favCreators", "");
+        if (!favs.isEmpty()) {
+            favoriteCreators.addAll(Arrays.asList(favs.split(",")));
+        }
+    }
+
+    private void saveFavorites() {
+        prefs.put("favCreators", String.join(",", favoriteCreators));
+    }
+
     private HttpURLConnection createConnection(String urlString) throws IOException {
         HttpURLConnection conn;
         while (true) {
             URL url = new URL(urlString);
             conn = (HttpURLConnection) url.openConnection();
             conn.setRequestProperty("User-Agent", "ZombieRool-Launcher/1.0");
-            conn.setInstanceFollowRedirects(false); // On gère les redirections nous-mêmes
+            conn.setInstanceFollowRedirects(false);
             
             int status = conn.getResponseCode();
             if (status == HttpURLConnection.HTTP_MOVED_TEMP || 
                 status == HttpURLConnection.HTTP_MOVED_PERM || 
                 status == HttpURLConnection.HTTP_SEE_OTHER) {
-                // Si on est redirigé, on récupère le nouveau lien et on recommence
                 urlString = conn.getHeaderField("Location");
                 continue;
             }
@@ -90,7 +113,7 @@ public class ZRLauncher extends JFrame {
     }
 
     private void initTranslations() {
-        langEN.put("title", "ZombieRool Launcher " + CURRENT_VERSION);
+        langEN.put("title", "ZombieRool Launcher");
         langEN.put("official", "Official Maps");
         langEN.put("community", "Community Maps");
         langEN.put("install", "Install");
@@ -107,8 +130,17 @@ public class ZRLauncher extends JFrame {
         langEN.put("update_later", "Later");
         langEN.put("path", "Install Path:");
         langEN.put("browse", "Browse...");
+        langEN.put("search", "Search map or author...");
+        langEN.put("sort_def", "Default Sort");
+        langEN.put("sort_az", "Name (A-Z)");
+        langEN.put("sort_za", "Name (Z-A)");
+        langEN.put("sort_dl", "Most Downloaded");
+        langEN.put("fav_only", "Favorite Creators Only");
+        langEN.put("fav_add", "Favorite");
+        langEN.put("fav_rem", "Unfavorite");
+        langEN.put("no_results", "No maps found matching your criteria.");
 
-        langFR.put("title", "ZombieRool Launcher " + CURRENT_VERSION);
+        langFR.put("title", "ZombieRool Launcher");
         langFR.put("official", "Maps Officielles");
         langFR.put("community", "Maps Communautaires");
         langFR.put("install", "Installer");
@@ -125,6 +157,15 @@ public class ZRLauncher extends JFrame {
         langFR.put("update_later", "Plus tard");
         langFR.put("path", "Dossier d'installation :");
         langFR.put("browse", "Parcourir...");
+        langFR.put("search", "Chercher une map ou un auteur...");
+        langFR.put("sort_def", "Tri par défaut");
+        langFR.put("sort_az", "Nom (A-Z)");
+        langFR.put("sort_za", "Nom (Z-A)");
+        langFR.put("sort_dl", "Plus téléchargés");
+        langFR.put("fav_only", "Créateurs favoris uniquement");
+        langFR.put("fav_add", "Favori");
+        langFR.put("fav_rem", "Retirer");
+        langFR.put("no_results", "Aucune map ne correspond à votre recherche.");
     }
 
     private String t(String key) {
@@ -132,8 +173,8 @@ public class ZRLauncher extends JFrame {
     }
 
     private void setupUI() {
-        setTitle(t("title"));
-        setSize(1000, 750);
+        setTitle(t("title") + " " + CURRENT_VERSION);
+        setSize(1050, 750);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
@@ -148,11 +189,13 @@ public class ZRLauncher extends JFrame {
             System.err.println("Impossible de charger l'icône.");
         }
 
+        // --- HEADER ---
         JPanel headerPanel = new JPanel(new BorderLayout());
         headerPanel.setBackground(COLOR_BG);
         headerPanel.setBorder(new EmptyBorder(20, 25, 10, 25));
 
-        JLabel lblMainTitle = new JLabel("<html>ZOMBIEROOL <span style='font-size:16px; color:#888888; font-style:italic;'>by Cryo60</span></html>");
+        // Affichage de la version à côté du titre
+        JLabel lblMainTitle = new JLabel("<html>ZOMBIEROOL <span style='font-size:16px; color:#888888; font-style:italic;'>by Cryo60</span> <span style='font-size:14px; color:#58a6ff; font-weight:normal;'>" + CURRENT_VERSION + "</span></html>");
         lblMainTitle.setFont(new Font("SansSerif", Font.BOLD, 32));
         lblMainTitle.setForeground(COLOR_ACCENT);
         
@@ -168,9 +211,10 @@ public class ZRLauncher extends JFrame {
         headerPanel.add(lblMainTitle, BorderLayout.WEST);
         headerPanel.add(langSelector, BorderLayout.EAST);
 
+        // --- TABS ---
         JPanel tabsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
         tabsPanel.setBackground(COLOR_BG);
-        tabsPanel.setBorder(new EmptyBorder(0, 20, 15, 20));
+        tabsPanel.setBorder(new EmptyBorder(0, 20, 5, 20));
 
         btnOfficial = createTabButton(t("official"));
         btnCommunity = createTabButton(t("community"));
@@ -191,24 +235,64 @@ public class ZRLauncher extends JFrame {
         tabsPanel.add(btnCommunity);
         updateTabStyles();
 
+        // --- FILTER PANEL (Recherche, Tri, Favoris) ---
+        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 20, 10));
+        filterPanel.setBackground(COLOR_BG);
+        filterPanel.setBorder(new EmptyBorder(0, 15, 10, 20));
+
+        txtSearch = new JTextField(20);
+        txtSearch.putClientProperty("JTextField.placeholderText", t("search"));
+        txtSearch.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { renderMaps(); }
+            public void removeUpdate(DocumentEvent e) { renderMaps(); }
+            public void changedUpdate(DocumentEvent e) { renderMaps(); }
+        });
+
+        cbSort = new JComboBox<>(new String[]{t("sort_def"), t("sort_az"), t("sort_za"), t("sort_dl")});
+        cbSort.addActionListener(e -> {
+            if (!isUpdatingUI) {
+                sortIndex = cbSort.getSelectedIndex();
+                renderMaps();
+            }
+        });
+
+        chkFavorites = new JCheckBox(t("fav_only"));
+        chkFavorites.setBackground(COLOR_BG);
+        chkFavorites.setForeground(Color.WHITE);
+        chkFavorites.setFocusPainted(false);
+        chkFavorites.addActionListener(e -> renderMaps());
+
+        filterPanel.add(txtSearch);
+        filterPanel.add(cbSort);
+        filterPanel.add(chkFavorites);
+
+        // --- TOP CONTAINER ---
         JPanel topContainer = new JPanel(new BorderLayout());
         topContainer.setBackground(COLOR_BG);
         topContainer.add(headerPanel, BorderLayout.NORTH);
-        topContainer.add(tabsPanel, BorderLayout.SOUTH);
+        
+        JPanel tabsAndFilters = new JPanel(new BorderLayout());
+        tabsAndFilters.setBackground(COLOR_BG);
+        tabsAndFilters.add(tabsPanel, BorderLayout.NORTH);
+        tabsAndFilters.add(filterPanel, BorderLayout.SOUTH);
+        
+        topContainer.add(tabsAndFilters, BorderLayout.CENTER);
         add(topContainer, BorderLayout.NORTH);
 
+        // --- MAPS LIST ---
         mainContentPanel = new JPanel();
         mainContentPanel.setLayout(new BoxLayout(mainContentPanel, BoxLayout.Y_AXIS));
         mainContentPanel.setBackground(COLOR_BG);
         mainContentPanel.setBorder(new EmptyBorder(10, 25, 40, 25));
         
-        JScrollPane scrollPane = new JScrollPane(mainContentPanel);
+        scrollPane = new JScrollPane(mainContentPanel);
         scrollPane.getVerticalScrollBar().setUnitIncrement(20);
         scrollPane.setBorder(null);
         scrollPane.setBackground(COLOR_BG);
         scrollPane.getViewport().setBackground(COLOR_BG);
         add(scrollPane, BorderLayout.CENTER);
 
+        // --- BOTTOM BAR ---
         JPanel bottomContainer = new JPanel(new BorderLayout(0, 15));
         bottomContainer.setBackground(new Color(25, 27, 30));
         bottomContainer.setBorder(new EmptyBorder(15, 25, 15, 25));
@@ -218,7 +302,11 @@ public class ZRLauncher extends JFrame {
         lblPath = new JLabel(t("path"));
         lblPath.setForeground(new Color(180, 180, 180));
         
-        txtInstallPath = new JTextField(getMinecraftSavesDir().getAbsolutePath());
+        // Chargement du Path sauvegardé
+        String defaultPath = getMinecraftSavesDir().getAbsolutePath();
+        String savedPath = prefs.get("installPath", defaultPath);
+        
+        txtInstallPath = new JTextField(savedPath);
         txtInstallPath.setEditable(false);
         txtInstallPath.setBackground(new Color(40, 44, 48));
         txtInstallPath.setForeground(Color.WHITE);
@@ -233,8 +321,10 @@ public class ZRLauncher extends JFrame {
             JFileChooser chooser = new JFileChooser(txtInstallPath.getText());
             chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
             if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                txtInstallPath.setText(chooser.getSelectedFile().getAbsolutePath());
-                loadMaps(showingOfficial ? OFFICIAL_JSON_URL : COMMUNITY_JSON_URL);
+                String newPath = chooser.getSelectedFile().getAbsolutePath();
+                txtInstallPath.setText(newPath);
+                prefs.put("installPath", newPath); // Sauvegarde du Path
+                renderMaps(); // Met à jour les boutons "Installer / Installé"
             }
         });
 
@@ -279,12 +369,22 @@ public class ZRLauncher extends JFrame {
     }
 
     private void updateTexts() {
-        setTitle(t("title"));
+        isUpdatingUI = true;
+        setTitle(t("title") + " " + CURRENT_VERSION);
         btnOfficial.setText(t("official"));
         btnCommunity.setText(t("community"));
         lblPath.setText(t("path"));
         btnBrowse.setText(t("browse"));
-        loadMaps(showingOfficial ? OFFICIAL_JSON_URL : COMMUNITY_JSON_URL);
+        
+        txtSearch.putClientProperty("JTextField.placeholderText", t("search"));
+        chkFavorites.setText(t("fav_only"));
+        
+        int currentSort = cbSort.getSelectedIndex();
+        cbSort.setModel(new DefaultComboBoxModel<>(new String[]{t("sort_def"), t("sort_az"), t("sort_za"), t("sort_dl")}));
+        cbSort.setSelectedIndex(currentSort);
+        
+        isUpdatingUI = false;
+        renderMaps();
     }
 
     private void checkForUpdates() {
@@ -345,7 +445,6 @@ public class ZRLauncher extends JFrame {
 
                 File newExe = new File(currentExe.getParentFile(), "ZRLauncher_new.exe");
 
-                // UTILISATION DE LA NOUVELLE FONCTION ICI
                 HttpURLConnection conn = createConnection(downloadUrl);
                 int fileSize = conn.getContentLength();
                 
@@ -423,38 +522,14 @@ public class ZRLauncher extends JFrame {
                 reader.close();
 
                 JsonArray mapsArray = json.getAsJsonArray("maps");
-                String featuredId = "";
-                if (featuredData != null) {
-                    String key = showingOfficial ? "official" : "community";
-                    if (featuredData.has(key)) featuredId = featuredData.get(key).getAsString();
+                List<JsonObject> newMaps = new ArrayList<>();
+                for (JsonElement elem : mapsArray) {
+                    newMaps.add(elem.getAsJsonObject());
                 }
 
-                final String finalFeaturedId = featuredId;
-
                 SwingUtilities.invokeLater(() -> {
-                    mainContentPanel.removeAll();
-                    
-                    for (JsonElement elem : mapsArray) {
-                        JsonObject mapObj = elem.getAsJsonObject();
-                        if (mapObj.get("id").getAsString().equals(finalFeaturedId)) {
-                            mainContentPanel.add(createMapCard(mapObj, true));
-                            mainContentPanel.add(Box.createVerticalStrut(15));
-                            break;
-                        }
-                    }
-
-                    for (JsonElement elem : mapsArray) {
-                        JsonObject mapObj = elem.getAsJsonObject();
-                        if (!mapObj.get("id").getAsString().equals(finalFeaturedId)) {
-                            mainContentPanel.add(createMapCard(mapObj, false));
-                            mainContentPanel.add(Box.createVerticalStrut(15));
-                        }
-                    }
-                    
-                    mainContentPanel.add(Box.createVerticalStrut(20));
-                    
-                    mainContentPanel.revalidate();
-                    mainContentPanel.repaint();
+                    currentMaps = newMaps;
+                    renderMaps();
                 });
 
             } catch (Exception e) {
@@ -468,6 +543,80 @@ public class ZRLauncher extends JFrame {
                 });
             }
         }).start();
+    }
+
+    // --- NOUVEAU : Fonction de rendu avec Filtres et Tri ---
+    private void renderMaps() {
+        int scrollValue = scrollPane.getVerticalScrollBar().getValue();
+        mainContentPanel.removeAll();
+        
+        String q = txtSearch.getText().toLowerCase();
+        
+        // 1. Filtrage (Recherche + Favoris)
+        Stream<JsonObject> stream = currentMaps.stream().filter(m -> {
+            String name = m.get("name").getAsString().toLowerCase();
+            String author = m.has("author") ? m.get("author").getAsString() : "Cryyoons";
+            
+            boolean matchSearch = q.isEmpty() || name.contains(q) || author.toLowerCase().contains(q);
+            boolean matchFav = !chkFavorites.isSelected() || favoriteCreators.contains(author);
+                
+            return matchSearch && matchFav;
+        });
+        
+        // 2. Tri
+        if (sortIndex == 1) { // A-Z
+            stream = stream.sorted((a, b) -> a.get("name").getAsString().compareToIgnoreCase(b.get("name").getAsString()));
+        } else if (sortIndex == 2) { // Z-A
+            stream = stream.sorted((a, b) -> b.get("name").getAsString().compareToIgnoreCase(a.get("name").getAsString()));
+        } else if (sortIndex == 3) { // Téléchargements
+            stream = stream.sorted((a, b) -> {
+                int d1 = a.has("downloads") ? a.get("downloads").getAsInt() : 0;
+                int d2 = b.has("downloads") ? b.get("downloads").getAsInt() : 0;
+                return Integer.compare(d2, d1);
+            });
+        }
+        
+        List<JsonObject> filtered = stream.collect(Collectors.toList());
+        
+        // 3. Gestion de la Map à la Une
+        String featuredId = "";
+        if (featuredData != null) {
+            String key = showingOfficial ? "official" : "community";
+            if (featuredData.has(key)) featuredId = featuredData.get(key).getAsString();
+        }
+        
+        final String fId = featuredId;
+        
+        // On affiche la map à la une en premier (si elle correspond aux filtres)
+        for (JsonObject m : filtered) {
+            if (m.get("id").getAsString().equals(fId)) {
+                mainContentPanel.add(createMapCard(m, true));
+                mainContentPanel.add(Box.createVerticalStrut(15));
+                break;
+            }
+        }
+        
+        // On affiche le reste
+        for (JsonObject m : filtered) {
+            if (!m.get("id").getAsString().equals(fId)) {
+                mainContentPanel.add(createMapCard(m, false));
+                mainContentPanel.add(Box.createVerticalStrut(15));
+            }
+        }
+        
+        if (filtered.isEmpty()) {
+            JLabel lblEmpty = new JLabel(t("no_results"));
+            lblEmpty.setFont(new Font("SansSerif", Font.ITALIC, 14));
+            lblEmpty.setForeground(new Color(150, 150, 150));
+            mainContentPanel.add(lblEmpty);
+        }
+        
+        mainContentPanel.add(Box.createVerticalStrut(20));
+        mainContentPanel.revalidate();
+        mainContentPanel.repaint();
+        
+        // Restaure la position du scroll
+        SwingUtilities.invokeLater(() -> scrollPane.getVerticalScrollBar().setValue(scrollValue));
     }
 
     private JPanel createMapCard(JsonObject mapData, boolean isFeatured) {
@@ -530,11 +679,38 @@ public class ZRLauncher extends JFrame {
             infoPanel.add(Box.createVerticalStrut(3));
         }
 
-        JLabel lblName = new JLabel("<html><span style='font-size:18px; font-weight:bold; color:white;'>" + name + "</span> <span style='font-size:13px; color:#aaaaaa'>by " + author + "</span></html>");
-        JLabel lblDesc = new JLabel("<html><p style='width:400px; font-size:13px; color:#cccccc; margin-top:5px;'>" + desc.replace("\n", "<br>") + "</p></html>");
-        JLabel lblStats = new JLabel("<html><span style='font-size:12px; color:#888888'>" + t("downloads") + downloads + "</span></html>");
+        // --- NOUVEAU : Bouton Favori à côté du nom ---
+        JPanel headerInfo = new JPanel();
+        headerInfo.setLayout(new BoxLayout(headerInfo, BoxLayout.X_AXIS));
+        headerInfo.setOpaque(false);
+        headerInfo.setAlignmentX(Component.LEFT_ALIGNMENT);
         
-        infoPanel.add(lblName);
+        headerInfo.add(new JLabel("<html><span style='font-size:18px; font-weight:bold; color:white;'>" + name + "</span> <span style='font-size:13px; color:#aaaaaa'>by " + author + "</span></html>"));
+        headerInfo.add(Box.createHorizontalStrut(10));
+        
+        boolean isFav = favoriteCreators.contains(author);
+        JButton btnFav = new JButton(isFav ? "⭐ " + t("fav_rem") : "☆ " + t("fav_add"));
+        btnFav.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        btnFav.setMargin(new Insets(2, 6, 2, 6));
+        btnFav.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btnFav.setFocusPainted(false);
+        btnFav.setBackground(isFav ? COLOR_ACCENT : new Color(60, 65, 70));
+        btnFav.setForeground(isFav ? Color.BLACK : Color.WHITE);
+        btnFav.addActionListener(e -> {
+            if (favoriteCreators.contains(author)) favoriteCreators.remove(author);
+            else favoriteCreators.add(author);
+            saveFavorites();
+            renderMaps(); // Rafraîchit l'UI
+        });
+        headerInfo.add(btnFav);
+
+        JLabel lblDesc = new JLabel("<html><p style='width:400px; font-size:13px; color:#cccccc; margin-top:5px;'>" + desc.replace("\n", "<br>") + "</p></html>");
+        lblDesc.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        JLabel lblStats = new JLabel("<html><span style='font-size:12px; color:#888888'>" + t("downloads") + downloads + "</span></html>");
+        lblStats.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        infoPanel.add(headerInfo);
         infoPanel.add(lblDesc);
         infoPanel.add(Box.createVerticalGlue());
         infoPanel.add(lblStats);
@@ -591,7 +767,6 @@ public class ZRLauncher extends JFrame {
                     globalProgressBar.setValue(0);
                 });
                 
-                // UTILISATION DE LA NOUVELLE FONCTION ICI AUSSI
                 HttpURLConnection conn = createConnection(downloadUrl);
                 int fileSize = conn.getContentLength();
                 
