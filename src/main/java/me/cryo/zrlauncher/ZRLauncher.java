@@ -23,11 +23,12 @@ import java.util.zip.ZipInputStream;
 
 public class ZRLauncher extends JFrame {
 
-    // PASSAGE EN VERSION 1.1
-    private static final String CURRENT_VERSION = "1.1";
+    // PASSAGE EN VERSION v1.1 (Correspond au tag GitHub)
+    private static final String CURRENT_VERSION = "v1.1";
     
     // URLs
-    private static final String UPDATE_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-maps/main/launcher_version.json";
+    // L'URL de mise à jour pointe maintenant vers le repo du launcher lui-même !
+    private static final String UPDATE_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-map-launcher/main/launcher_version.json";
     private static final String OFFICIAL_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-maps/main/maps.json";
     private static final String COMMUNITY_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-community-hub/main/maps.json";
     private static final String FEATURED_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-maps/main/featured.json";
@@ -64,7 +65,7 @@ public class ZRLauncher extends JFrame {
     }
 
     private void initTranslations() {
-        langEN.put("title", "ZombieRool Launcher v" + CURRENT_VERSION);
+        langEN.put("title", "ZombieRool Launcher " + CURRENT_VERSION);
         langEN.put("official", "Official Maps");
         langEN.put("community", "Community Maps");
         langEN.put("install", "Install");
@@ -82,7 +83,7 @@ public class ZRLauncher extends JFrame {
         langEN.put("path", "Install Path:");
         langEN.put("browse", "Browse...");
 
-        langFR.put("title", "ZombieRool Launcher v" + CURRENT_VERSION);
+        langFR.put("title", "ZombieRool Launcher " + CURRENT_VERSION);
         langFR.put("official", "Maps Officielles");
         langFR.put("community", "Maps Communautaires");
         langFR.put("install", "Installer");
@@ -118,7 +119,6 @@ public class ZRLauncher extends JFrame {
         headerPanel.setBackground(COLOR_BG);
         headerPanel.setBorder(new EmptyBorder(20, 25, 10, 25));
 
-        // AJOUT DU "by Cryo60" ICI
         JLabel lblMainTitle = new JLabel("<html>ZOMBIEROOL <span style='font-size:16px; color:#888888; font-style:italic;'>by Cryo60</span></html>");
         lblMainTitle.setFont(new Font("SansSerif", Font.BOLD, 32));
         lblMainTitle.setForeground(COLOR_ACCENT);
@@ -286,7 +286,6 @@ public class ZRLauncher extends JFrame {
     }
 
     private void showUpdateDialog(String newVersion, String downloadUrl) {
-        // FIX DES BOUTONS : On force le texte selon la langue choisie dans l'appli
         String[] options = { t("update_btn"), t("update_later") };
         
         int response = JOptionPane.showOptionDialog(this,
@@ -298,7 +297,7 @@ public class ZRLauncher extends JFrame {
                 options,
                 options[0]);
 
-        if (response == 0) { // 0 correspond au premier bouton (Mettre à jour)
+        if (response == 0) {
             performUpdate(downloadUrl);
         } else {
             fetchFeaturedAndLoad();
@@ -314,7 +313,10 @@ public class ZRLauncher extends JFrame {
                     globalProgressBar.setValue(0);
                 });
 
-                File currentExe = new File(ZRLauncher.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+                // Sécurité Launch4j : on s'assure de bien cibler le .exe et pas le .jar
+                String exePath = System.getProperty("launch4j.exefile");
+                File currentExe = exePath != null ? new File(exePath) : new File(ZRLauncher.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+                
                 String exeName = currentExe.getName();
                 if (!exeName.endsWith(".exe")) exeName = "ZRLauncher.exe";
 
@@ -329,11 +331,20 @@ public class ZRLauncher extends JFrame {
                     byte[] buffer = new byte[8192];
                     int bytesRead;
                     int totalRead = 0;
+                    int lastPercent = -1;
+                    
                     while ((bytesRead = in.read(buffer)) != -1) {
                         out.write(buffer, 0, bytesRead);
                         totalRead += bytesRead;
-                        int percent = (int) ((totalRead * 100L) / fileSize);
-                        SwingUtilities.invokeLater(() -> globalProgressBar.setValue(percent));
+                        if (fileSize > 0) {
+                            int percent = (int) ((totalRead * 100L) / fileSize);
+                            // Optimisation : on ne met à jour l'UI que si le % change pour éviter les freezes
+                            if (percent != lastPercent) {
+                                lastPercent = percent;
+                                final int currentPercent = percent;
+                                SwingUtilities.invokeLater(() -> globalProgressBar.setValue(currentPercent));
+                            }
+                        }
                     }
                 }
 
@@ -577,12 +588,19 @@ public class ZRLauncher extends JFrame {
                     byte[] buffer = new byte[8192];
                     int bytesRead;
                     int totalRead = 0;
+                    int lastPercent = -1;
+                    
                     while ((bytesRead = in.read(buffer)) != -1) {
                         out.write(buffer, 0, bytesRead);
                         totalRead += bytesRead;
                         if (fileSize > 0) {
                             int percent = (int) ((totalRead * 100L) / fileSize);
-                            SwingUtilities.invokeLater(() -> globalProgressBar.setValue(percent));
+                            // Optimisation : on ne met à jour l'UI que si le % change
+                            if (percent != lastPercent) {
+                                lastPercent = percent;
+                                final int currentPercent = percent;
+                                SwingUtilities.invokeLater(() -> globalProgressBar.setValue(currentPercent));
+                            }
                         }
                     }
                 }
