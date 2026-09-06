@@ -18,16 +18,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.prefs.Preferences;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 public class ZRLauncher extends JFrame {
 
-    // PASSAGE EN VERSION v1.1 (Correspond au tag GitHub)
-    private static final String CURRENT_VERSION = "v1.1";
+    // PASSAGE EN VERSION v1.2
+    private static final String CURRENT_VERSION = "v1.2";
     
-    // URLs
-    // L'URL de mise à jour pointe maintenant vers le repo du launcher lui-même
     private static final String UPDATE_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-map-launcher/main/launcher_version.json";
     private static final String OFFICIAL_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-maps/main/maps.json";
     private static final String COMMUNITY_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-community-hub/main/maps.json";
@@ -36,6 +35,9 @@ public class ZRLauncher extends JFrame {
     private boolean isFrench = false;
     private final Map<String, String> langEN = new HashMap<>();
     private final Map<String, String> langFR = new HashMap<>();
+    
+    // Système de sauvegarde des préférences
+    private final Preferences prefs = Preferences.userNodeForPackage(ZRLauncher.class);
 
     private JPanel mainContentPanel;
     private JComboBox<String> langSelector;
@@ -51,14 +53,16 @@ public class ZRLauncher extends JFrame {
     private JsonObject featuredData = null;
     private final Map<String, Image> imageCache = new HashMap<>();
 
-    // Couleurs du thème
     private final Color COLOR_BG = new Color(30, 33, 36);
     private final Color COLOR_CARD = new Color(43, 47, 51);
-    private final Color COLOR_ACCENT = new Color(234, 179, 8); // Doré
+    private final Color COLOR_ACCENT = new Color(234, 179, 8);
     private final Color COLOR_GREEN = new Color(46, 160, 67);
     private final Color COLOR_BLUE = new Color(88, 166, 255);
 
     public ZRLauncher() {
+        // Charge la langue sauvegardée (par défaut false = Anglais)
+        isFrench = prefs.getBoolean("isFrench", false);
+        
         initTranslations();
         setupUI();
         checkForUpdates();
@@ -114,7 +118,17 @@ public class ZRLauncher extends JFrame {
         setLayout(new BorderLayout());
         getContentPane().setBackground(COLOR_BG);
 
-        // --- HEADER (Titre + Langue) ---
+        // --- CHARGEMENT DE L'ICÔNE POUR LA BARRE DES TÂCHES ---
+        try {
+            URL iconURL = ZRLauncher.class.getResource("/icon.png");
+            if (iconURL != null) {
+                setIconImage(new ImageIcon(iconURL).getImage());
+            }
+        } catch (Exception e) {
+            System.err.println("Impossible de charger l'icône.");
+        }
+
+        // --- HEADER ---
         JPanel headerPanel = new JPanel(new BorderLayout());
         headerPanel.setBackground(COLOR_BG);
         headerPanel.setBorder(new EmptyBorder(20, 25, 10, 25));
@@ -125,15 +139,17 @@ public class ZRLauncher extends JFrame {
         
         langSelector = new JComboBox<>(new String[]{"English", "Français"});
         langSelector.setPreferredSize(new Dimension(100, 30));
+        langSelector.setSelectedIndex(isFrench ? 1 : 0); // Met la bonne langue au démarrage
         langSelector.addActionListener(e -> {
             isFrench = langSelector.getSelectedIndex() == 1;
+            prefs.putBoolean("isFrench", isFrench); // Sauvegarde le choix
             updateTexts();
         });
 
         headerPanel.add(lblMainTitle, BorderLayout.WEST);
         headerPanel.add(langSelector, BorderLayout.EAST);
 
-        // --- TABS (Onglets) ---
+        // --- TABS ---
         JPanel tabsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
         tabsPanel.setBackground(COLOR_BG);
         tabsPanel.setBorder(new EmptyBorder(0, 20, 15, 20));
@@ -157,7 +173,6 @@ public class ZRLauncher extends JFrame {
         tabsPanel.add(btnCommunity);
         updateTabStyles();
 
-        // Conteneur Haut
         JPanel topContainer = new JPanel(new BorderLayout());
         topContainer.setBackground(COLOR_BG);
         topContainer.add(headerPanel, BorderLayout.NORTH);
@@ -177,12 +192,11 @@ public class ZRLauncher extends JFrame {
         scrollPane.getViewport().setBackground(COLOR_BG);
         add(scrollPane, BorderLayout.CENTER);
 
-        // --- BOTTOM BAR (Path + Status) ---
+        // --- BOTTOM BAR ---
         JPanel bottomContainer = new JPanel(new BorderLayout(0, 15));
         bottomContainer.setBackground(new Color(25, 27, 30));
         bottomContainer.setBorder(new EmptyBorder(15, 25, 15, 25));
 
-        // Path Selector
         JPanel pathPanel = new JPanel(new BorderLayout(10, 0));
         pathPanel.setOpaque(false);
         lblPath = new JLabel(t("path"));
@@ -213,7 +227,6 @@ public class ZRLauncher extends JFrame {
         pathPanel.add(btnBrowse, BorderLayout.EAST);
         bottomContainer.add(pathPanel, BorderLayout.NORTH);
 
-        // Status & Progress
         JPanel statusPanel = new JPanel(new BorderLayout(15, 0));
         statusPanel.setOpaque(false);
         lblStatus = new JLabel(t("done"));
@@ -258,9 +271,6 @@ public class ZRLauncher extends JFrame {
         loadMaps(showingOfficial ? OFFICIAL_JSON_URL : COMMUNITY_JSON_URL);
     }
 
-    // ==========================================
-    // AUTO-UPDATE SYSTEM
-    // ==========================================
     private void checkForUpdates() {
         new Thread(() -> {
             try {
@@ -313,7 +323,6 @@ public class ZRLauncher extends JFrame {
                     globalProgressBar.setValue(0);
                 });
 
-                // Sécurité Launch4j : on s'assure de bien cibler le .exe et pas le .jar
                 String exePath = System.getProperty("launch4j.exefile");
                 File currentExe = exePath != null ? new File(exePath) : new File(ZRLauncher.class.getProtectionDomain().getCodeSource().getLocation().toURI());
                 
@@ -338,7 +347,6 @@ public class ZRLauncher extends JFrame {
                         totalRead += bytesRead;
                         if (fileSize > 0) {
                             int percent = (int) ((totalRead * 100L) / fileSize);
-                            // Optimisation : on ne met à jour l'UI que si le % change pour éviter les freezes
                             if (percent != lastPercent) {
                                 lastPercent = percent;
                                 final int currentPercent = percent;
@@ -371,9 +379,6 @@ public class ZRLauncher extends JFrame {
         }).start();
     }
 
-    // ==========================================
-    // MAPS LOADING SYSTEM
-    // ==========================================
     private void fetchFeaturedAndLoad() {
         new Thread(() -> {
             try {
@@ -473,7 +478,6 @@ public class ZRLauncher extends JFrame {
         ));
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 160));
 
-        // --- IMAGE ---
         JLabel lblImage = new JLabel();
         lblImage.setPreferredSize(new Dimension(220, 124));
         lblImage.setOpaque(true);
@@ -504,7 +508,6 @@ public class ZRLauncher extends JFrame {
             }
         }
 
-        // --- INFOS ---
         JPanel infoPanel = new JPanel();
         infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
         infoPanel.setOpaque(false);
@@ -528,7 +531,6 @@ public class ZRLauncher extends JFrame {
 
         card.add(infoPanel, BorderLayout.CENTER);
 
-        // --- BOUTON INSTALL ---
         JPanel actionPanel = new JPanel(new GridBagLayout());
         actionPanel.setOpaque(false);
         
@@ -595,7 +597,6 @@ public class ZRLauncher extends JFrame {
                         totalRead += bytesRead;
                         if (fileSize > 0) {
                             int percent = (int) ((totalRead * 100L) / fileSize);
-                            // Optimisation : on ne met à jour l'UI que si le % change
                             if (percent != lastPercent) {
                                 lastPercent = percent;
                                 final int currentPercent = percent;
@@ -676,6 +677,16 @@ public class ZRLauncher extends JFrame {
     }
 
     public static void main(String[] args) {
+        // --- LECTURE DE LA LANGUE DE L'INSTALLEUR ---
+        if (args.length > 0) {
+            Preferences prefs = Preferences.userNodeForPackage(ZRLauncher.class);
+            if (args[0].equalsIgnoreCase("french")) {
+                prefs.putBoolean("isFrench", true);
+            } else if (args[0].equalsIgnoreCase("english")) {
+                prefs.putBoolean("isFrench", false);
+            }
+        }
+
         try {
             UIManager.put("Button.arc", 10);
             UIManager.put("Component.arc", 10);
