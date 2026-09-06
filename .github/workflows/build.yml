@@ -3,8 +3,13 @@ name: Build Launcher EXE & Release
 on:
   push:
     branches: [ "main" ]
-    tags: [ "v*" ]
+  # Permet de lancer le script manuellement avec un bouton sur GitHub
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version à publier (ex: v1.1)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -28,7 +33,6 @@ jobs:
       run: mvn clean package -B
 
     - name: 🛠️ Génération du mini-JRE Windows (jlink)
-      # AJOUT CRUCIAL ICI : jdk.crypto.ec pour autoriser les connexions HTTPS (GitHub)
       run: |
         jlink --add-modules java.base,java.desktop,java.logging,java.management,java.naming,java.sql,java.xml,jdk.unsupported,jdk.crypto.ec --output target/jre --strip-debug --no-man-pages --no-header-files --compress=2
         
@@ -42,11 +46,33 @@ jobs:
         path: target/ZRLauncher-Setup.exe
         retention-days: 7
 
-    - name: 🚀 Upload Release Asset
-      if: startsWith(github.ref, 'refs/tags/')
+    # --- NOUVEAU : Détection automatique de la volonté de faire une Release ---
+    - name: 🔍 Check for Release Trigger
+      id: release_check
+      shell: bash
+      run: |
+        # 1. Si lancé manuellement via le bouton avec une version
+        if [ "${{ github.event.inputs.version }}" != "" ]; then
+          echo "tag=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          echo "should_release=true" >> $GITHUB_OUTPUT
+          
+        # 2. Si le message de commit contient le mot magique ex: [release v1.1]
+        elif [[ "${{ github.event.head_commit.message }}" =~ \[release\ (v[0-9\.]+)\] ]]; then
+          echo "tag=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+          echo "should_release=true" >> $GITHUB_OUTPUT
+          
+        # 3. Sinon, on compile juste pour tester (pas de release publique)
+        else
+          echo "should_release=false" >> $GITHUB_OUTPUT
+        fi
+
+    # --- NOUVEAU : Création de la Release 100% automatique ---
+    - name: 🚀 Création automatique de la Release
+      if: steps.release_check.outputs.should_release == 'true'
       uses: softprops/action-gh-release@v2
       with:
+        tag_name: ${{ steps.release_check.outputs.tag }}
+        name: Release ${{ steps.release_check.outputs.tag }}
         files: target/ZRLauncher-Setup.exe
-        name: Release ${{ github.ref_name }}
         draft: false
         prerelease: false
