@@ -3,10 +3,9 @@ name: Build Launcher EXE & Release
 on:
   push:
     branches: [ "main" ]
-    tags: [ "v*" ] # Déclenche aussi quand tu crées une version (ex: v1.0)
+    tags: [ "v*" ]
   workflow_dispatch:
 
-# Autorisation obligatoire pour que le bot puisse publier la Release
 permissions:
   contents: write
 
@@ -30,30 +29,20 @@ jobs:
 
     - name: 🛠️ Génération du mini-JRE Windows (jlink)
       run: |
-        & "$env:JAVA_HOME\bin\jlink.exe" --no-header-files --no-man-pages --compress=2 --strip-debug --add-modules java.base,java.desktop,java.logging,java.xml,jdk.unsupported --output target/jre
-      
-    - name: 🗜️ Création du dossier et du ZIP
-      run: |
-        New-Item -ItemType Directory -Force -Path release_folder
-        Copy-Item target\ZRLauncher.exe release_folder\
-        Copy-Item target\jre release_folder\jre -Recurse
-        Compress-Archive -Path release_folder\* -DestinationPath ZRLauncher-Windows.zip
+        # jlink crée un JRE sur mesure contenant uniquement ce dont ton app a besoin (Swing, etc.)
+        # Cela réduit drastiquement la taille par rapport à un JRE complet.
+        jlink --add-modules java.base,java.desktop,java.logging,java.management,java.naming,java.sql,java.xml,jdk.unsupported --output target/jre --strip-debug --no-man-pages --no-header-files --compress=2
+        
+    - name: 🏗️ Création de l'Installeur (Inno Setup)
+      # iscc est le compilateur d'Inno Setup, pré-installé sur les serveurs Windows de GitHub
+      run: iscc setup.iss
 
-    - name: 💾 Upload Artifact (Pour tester)
-      uses: actions/upload-artifact@v4
-      with:
-        name: ZRLauncher-App
-        path: ZRLauncher-Windows.zip
-
-    - name: 🚀 Création de la Release GitHub
-      if: startsWith(github.ref, 'refs/tags/v')
+    - name: 🚀 Upload Release Asset
+      # Cette étape ne s'exécute que si tu crées un Tag (ex: v1.0)
+      if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
-        # On upload le ZIP pour les joueurs, ET le EXE pour ton auto-updater !
-        files: |
-          ZRLauncher-Windows.zip
-          target/ZRLauncher.exe
-        name: ZombieRool Launcher ${{ github.ref_name }}
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        files: target/ZRLauncher-Setup.exe
+        name: Release ${{ github.ref_name }}
+        draft: false
+        prerelease: false
