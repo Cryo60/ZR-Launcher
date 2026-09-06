@@ -3,7 +3,6 @@ name: Build Launcher EXE & Release
 on:
   push:
     branches: [ "main" ]
-  # Permet de lancer le script manuellement avec un bouton sur GitHub
   workflow_dispatch:
     inputs:
       version:
@@ -21,7 +20,9 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+      with:
+        fetch-depth: 0 # 👈 IMPORTANT : Permet au bot de push le JSON plus tard
+
     - name: Set up Java
       uses: actions/setup-java@v4
       with:
@@ -39,40 +40,48 @@ jobs:
     - name: 🏗️ Création de l'Installeur (Inno Setup)
       run: iscc setup.iss
 
-    - name: 💾 Upload Artifact (Pour les tests)
-      uses: actions/upload-artifact@v4
-      with:
-        name: ZRLauncher-Setup
-        path: target/ZRLauncher-Setup.exe
-        retention-days: 7
-
-    # --- NOUVEAU : Détection automatique de la volonté de faire une Release ---
     - name: 🔍 Check for Release Trigger
       id: release_check
       shell: bash
       run: |
-        # 1. Si lancé manuellement via le bouton avec une version
         if [ "${{ github.event.inputs.version }}" != "" ]; then
           echo "tag=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
           echo "should_release=true" >> $GITHUB_OUTPUT
-          
-        # 2. Si le message de commit contient le mot magique ex: [release v1.1]
         elif [[ "${{ github.event.head_commit.message }}" =~ \[release\ (v[0-9\.]+)\] ]]; then
           echo "tag=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
           echo "should_release=true" >> $GITHUB_OUTPUT
-          
-        # 3. Sinon, on compile juste pour tester (pas de release publique)
         else
           echo "should_release=false" >> $GITHUB_OUTPUT
         fi
 
-    # --- NOUVEAU : Création de la Release 100% automatique ---
     - name: 🚀 Création automatique de la Release
       if: steps.release_check.outputs.should_release == 'true'
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ steps.release_check.outputs.tag }}
         name: Release ${{ steps.release_check.outputs.tag }}
-        files: target/ZRLauncher-Setup.exe
+        # 👇 CORRECTION : On upload l'installeur ET le launcher brut
+        files: |
+          target/ZRLauncher-Setup.exe
+          target/ZRLauncher.exe
         draft: false
         prerelease: false
+
+    - name: 🤖 Mise à jour automatique du launcher_version.json
+      if: steps.release_check.outputs.should_release == 'true'
+      shell: bash
+      run: |
+        # Le bot crée ou met à jour le fichier JSON avec le bon lien de téléchargement
+        echo '{
+          "version": "${{ steps.release_check.outputs.tag }}",
+          "download_url": "https://github.com/${{ github.repository }}/releases/download/${{ steps.release_check.outputs.tag }}/ZRLauncher.exe"
+        }' > launcher_version.json
+
+        # Le bot s'identifie sur Git
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        # Le bot sauvegarde le fichier sur ton repo
+        git add launcher_version.json
+        git commit -m "🤖 Auto-update launcher_version.json to ${{ steps.release_check.outputs.tag }}"
+        git push
