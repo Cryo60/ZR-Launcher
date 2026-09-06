@@ -27,7 +27,7 @@ public class ZRLauncher extends JFrame {
     private static final String CURRENT_VERSION = "v1.1";
     
     // URLs
-    // L'URL de mise à jour pointe maintenant vers le repo du launcher lui-même !
+    // L'URL de mise à jour pointe maintenant vers le repo du launcher lui-même
     private static final String UPDATE_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-map-launcher/main/launcher_version.json";
     private static final String OFFICIAL_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-maps/main/maps.json";
     private static final String COMMUNITY_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-community-hub/main/maps.json";
