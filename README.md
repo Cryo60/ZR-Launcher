@@ -14,10 +14,6 @@ Welcome to the official **ZombieRool Map Launcher**! This tool allows you to eas
 3. Open the Launcher, pick a map, and click **Install**.
 4. Launch Minecraft and enjoy!
 
-## 🗺️ How to submit your map?
-Are you a map maker? We'd love to feature your map on the Community tab!
-Join our Discord server and submit your map in the dedicated channel.
-
 ## 💬 Community & Support
 Need help or want to find players? Join the ZombieRool community!
 * [Join our Discord Server](LIEN_DE_TON_DISCORD)
