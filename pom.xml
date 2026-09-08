@@ -6,7 +6,7 @@
 
     <groupId>me.cryo</groupId>
     <artifactId>zombierool-map-launcher</artifactId>
-    <version>1.4</version>
+    <version>1.5</version>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
@@ -78,6 +78,10 @@
                                 <minVersion>17</minVersion>
                                 <opts>
                                     <opt>-Dfile.encoding=UTF-8</opt>
+                                    <!-- Expose le chemin réel de l'exe en cours d'exécution (utilisé par
+                                         l'auto-updater pour savoir quel fichier remplacer). Sans ça,
+                                         System.getProperty("launch4j.exefile") renvoie null côté Java. -->
+                                    <opt>-Dlaunch4j.exefile="%EXEFILE%"</opt>
                                 </opts>
                             </jre>
                             <icon>${project.basedir}/icon.ico</icon>
