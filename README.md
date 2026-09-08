@@ -20,7 +20,7 @@ To submit your map, simply launch Minecraft, go to the **Map** menu in-game, and
 
 ## 💬 Community & Support
 Need help or want to find players? Join the ZombieRool community!
-* [Join our Discord Server](https://discord.gg/WMNEZA8qR)
+* [Join our Discord Server](https://discord.gg/BSG2N6cxy)
 
 ---
 *Developed with ❤️ by Cryo60*
