@@ -28,5 +28,4 @@ Name: "{autoprograms}\ZombieRool Launcher"; Filename: "{app}\ZRLauncher.exe"; Ic
 Name: "{autodesktop}\ZombieRool Launcher"; Filename: "{app}\ZRLauncher.exe"; IconFilename: "{app}\icon.ico"; Tasks: desktopicon
 
 [Run]
-; L'installeur envoie la langue choisie (ex: "french") au launcher lors du premier lancement !
 Filename: "{app}\ZRLauncher.exe"; Parameters: "{language}"; Description: "{cm:LaunchProgram,ZombieRool Launcher}"; Flags: nowait postinstall skipifsilent
