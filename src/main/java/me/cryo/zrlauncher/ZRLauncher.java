@@ -12,14 +12,22 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.prefs.BackingStoreException;
 import java.util.prefs.Preferences;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -28,13 +36,21 @@ import java.util.zip.ZipInputStream;
 
 public class ZRLauncher extends JFrame {
 
-    // PASSAGE EN VERSION v1.3
-    private static final String CURRENT_VERSION = "v1.3";
+    // PASSAGE EN VERSION v1.4
+    private static final String CURRENT_VERSION = "v1.4";
     
-    private static final String UPDATE_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-map-launcher/main/launcher_version.json";
+    private static final String UPDATE_JSON_URL = "https://raw.githubusercontent.com/Cryo60/ZR-Launcher/main/launcher_version.json";
     private static final String OFFICIAL_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-maps/main/maps.json";
     private static final String COMMUNITY_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-community-hub/main/maps.json";
     private static final String FEATURED_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-maps/main/featured.json";
+
+    // Les maps sont distribuées en tant qu'assets de Release GitHub. GitHub compte
+    // déjà nativement le nombre de téléchargements de chaque asset (incrémenté à
+    // chaque fois que quelqu'un télécharge via sa "browser_download_url", ce qui
+    // est justement le "download_url" utilisé par le launcher). On récupère donc
+    // ce compteur officiel via l'API, sans rien avoir à héberger nous-mêmes.
+    private static final String OFFICIAL_RELEASES_API = "https://api.github.com/repos/Cryo60/zombierool-maps/releases?per_page=100";
+    private static final String COMMUNITY_RELEASES_API = "https://api.github.com/repos/Cryo60/zombierool-community-hub/releases?per_page=100";
 
     private boolean isFrench = false;
     private final Map<String, String> langEN = new HashMap<>();
@@ -42,6 +58,11 @@ public class ZRLauncher extends JFrame {
     
     private final Preferences prefs = Preferences.userNodeForPackage(ZRLauncher.class);
     private final Set<String> favoriteCreators = new HashSet<>();
+
+    // Clé = download_url exact du maps.json -> nombre réel de téléchargements
+    // récupéré depuis l'API GitHub. Accédé depuis le thread réseau et l'EDT,
+    // d'où le ConcurrentHashMap.
+    private final Map<String, Integer> githubDownloadCounts = new ConcurrentHashMap<>();
 
     private JPanel mainContentPanel;
     private JScrollPane scrollPane;
@@ -90,6 +111,22 @@ public class ZRLauncher extends JFrame {
 
     private void saveFavorites() {
         prefs.put("favCreators", String.join(",", favoriteCreators));
+        flushPreferences();
+    }
+
+    /**
+     * Force l'écriture immédiate des préférences sur le disque (registre Windows
+     * ou fichier XML sous Linux/Mac). Sans cet appel, java.util.prefs.Preferences
+     * peut écrire les valeurs de manière asynchrone/différée, ce qui fait qu'une
+     * fermeture de l'application juste après un changement peut faire perdre la
+     * modification.
+     */
+    private void flushPreferences() {
+        try {
+            prefs.flush();
+        } catch (BackingStoreException e) {
+            System.err.println("Impossible de sauvegarder les préférences : " + e.getMessage());
+        }
     }
 
     private HttpURLConnection createConnection(String urlString) throws IOException {
@@ -180,6 +217,17 @@ public class ZRLauncher extends JFrame {
         setLayout(new BorderLayout());
         getContentPane().setBackground(COLOR_BG);
 
+        // Filet de sécurité : force la sauvegarde de toutes les préférences
+        // (langue, chemin d'installation, favoris) juste avant que la fenêtre
+        // ne se ferme, quelle que soit la façon dont l'utilisateur ferme
+        // l'application (croix, Alt+F4, etc.).
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                flushPreferences();
+            }
+        });
+
         try {
             URL iconURL = ZRLauncher.class.getResource("/icon.png");
             if (iconURL != null) {
@@ -205,6 +253,7 @@ public class ZRLauncher extends JFrame {
         langSelector.addActionListener(e -> {
             isFrench = langSelector.getSelectedIndex() == 1;
             prefs.putBoolean("isFrench", isFrench);
+            flushPreferences();
             updateTexts();
         });
 
@@ -324,6 +373,7 @@ public class ZRLauncher extends JFrame {
                 String newPath = chooser.getSelectedFile().getAbsolutePath();
                 txtInstallPath.setText(newPath);
                 prefs.put("installPath", newPath); // Sauvegarde du Path
+                flushPreferences();
                 renderMaps(); // Met à jour les boutons "Installer / Installé"
             }
         });
@@ -503,6 +553,87 @@ public class ZRLauncher extends JFrame {
             } catch (Exception ignored) {}
             SwingUtilities.invokeLater(() -> loadMaps(OFFICIAL_JSON_URL));
         }).start();
+
+        fetchGithubDownloadCounts(OFFICIAL_RELEASES_API);
+        fetchGithubDownloadCounts(COMMUNITY_RELEASES_API);
+    }
+
+    /**
+     * Récupère, pour un repo de maps donné, le nombre réel de téléchargements de
+     * chaque asset de release via l'API GitHub, et met à jour githubDownloadCounts.
+     * Gère la pagination (Link header) et échoue silencieusement (on retombe alors
+     * sur le champ statique "downloads" du maps.json, cf. getDownloadCount()).
+     */
+    private void fetchGithubDownloadCounts(String releasesApiUrl) {
+        new Thread(() -> {
+            try {
+                Map<String, Integer> counts = new HashMap<>();
+                String nextUrl = releasesApiUrl;
+                int safetyPageLimit = 10; // évite une boucle infinie en cas de pagination inattendue
+
+                while (nextUrl != null && safetyPageLimit-- > 0) {
+                    HttpURLConnection conn = createConnection(nextUrl);
+                    conn.setRequestProperty("Accept", "application/vnd.github+json");
+
+                    try (InputStreamReader reader = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)) {
+                        JsonArray releases = new Gson().fromJson(reader, JsonArray.class);
+                        if (releases != null) {
+                            for (JsonElement relElem : releases) {
+                                JsonObject release = relElem.getAsJsonObject();
+                                if (!release.has("assets")) continue;
+                                for (JsonElement assetElem : release.getAsJsonArray("assets")) {
+                                    JsonObject asset = assetElem.getAsJsonObject();
+                                    if (asset.has("browser_download_url") && asset.has("download_count")) {
+                                        counts.put(
+                                                asset.get("browser_download_url").getAsString(),
+                                                asset.get("download_count").getAsInt()
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    nextUrl = extractNextPageUrl(conn.getHeaderField("Link"));
+                }
+
+                githubDownloadCounts.putAll(counts);
+                SwingUtilities.invokeLater(this::renderMaps);
+            } catch (Exception e) {
+                // Pas grave : on retombe simplement sur le champ "downloads" du maps.json
+                System.err.println("Impossible de récupérer les stats de téléchargement GitHub : " + e.getMessage());
+            }
+        }).start();
+    }
+
+    /**
+     * Parse l'en-tête HTTP "Link" (pagination standard de l'API GitHub, RFC 5988)
+     * pour trouver l'URL de la page suivante, s'il y en a une.
+     */
+    private String extractNextPageUrl(String linkHeader) {
+        if (linkHeader == null) return null;
+        for (String part : linkHeader.split(",")) {
+            String[] section = part.split(";");
+            if (section.length < 2) continue;
+            if (section[1].trim().equals("rel=\"next\"")) {
+                return section[0].trim().replaceAll("^<|>$", "");
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Nombre de téléchargements à afficher pour une map : on privilégie le
+     * compteur réel de GitHub (basé sur le download_url), et on retombe sur le
+     * champ statique "downloads" du maps.json si l'API n'a pas encore répondu
+     * ou n'a pas cette entrée.
+     */
+    private int getDownloadCount(JsonObject mapData) {
+        if (mapData.has("download_url")) {
+            Integer real = githubDownloadCounts.get(mapData.get("download_url").getAsString());
+            if (real != null) return real;
+        }
+        return mapData.has("downloads") ? mapData.get("downloads").getAsInt() : 0;
     }
 
     private void loadMaps(String jsonUrl) {
@@ -569,11 +700,7 @@ public class ZRLauncher extends JFrame {
         } else if (sortIndex == 2) { // Z-A
             stream = stream.sorted((a, b) -> b.get("name").getAsString().compareToIgnoreCase(a.get("name").getAsString()));
         } else if (sortIndex == 3) { // Téléchargements
-            stream = stream.sorted((a, b) -> {
-                int d1 = a.has("downloads") ? a.get("downloads").getAsInt() : 0;
-                int d2 = b.has("downloads") ? b.get("downloads").getAsInt() : 0;
-                return Integer.compare(d2, d1);
-            });
+            stream = stream.sorted((a, b) -> Integer.compare(getDownloadCount(b), getDownloadCount(a)));
         }
         
         List<JsonObject> filtered = stream.collect(Collectors.toList());
@@ -626,7 +753,7 @@ public class ZRLauncher extends JFrame {
         String author = mapData.has("author") ? mapData.get("author").getAsString() : "Cryyoons";
         String downloadUrl = mapData.get("download_url").getAsString();
         String imageUrl = mapData.has("image_url") ? mapData.get("image_url").getAsString() : "";
-        int downloads = mapData.has("downloads") ? mapData.get("downloads").getAsInt() : 0;
+        int downloads = getDownloadCount(mapData);
 
         JPanel card = new JPanel(new BorderLayout(20, 0));
         card.setBackground(COLOR_CARD);
@@ -796,7 +923,7 @@ public class ZRLauncher extends JFrame {
                     globalProgressBar.setIndeterminate(true);
                 });
                 
-                unzip(tempZip, savesDir);
+                installMapZip(tempZip, savesDir, mapName);
                 tempZip.delete();
 
                 SwingUtilities.invokeLater(() -> {
@@ -845,6 +972,85 @@ public class ZRLauncher extends JFrame {
             }
             zis.closeEntry();
         }
+    }
+
+    /**
+     * Installe une map en s'assurant qu'elle finit TOUJOURS dans son propre
+     * dossier savesDir/mapName, jamais mélangée avec les autres mondes de
+     * "saves". On extrait d'abord dans un dossier temporaire, puis :
+     *  - si le zip contenait déjà un unique dossier racine (ex: certains zips
+     *    GitHub "reponame-branch/"), on renomme directement ce dossier en
+     *    mapName ;
+     *  - sinon (fichiers du monde directement à la racine du zip : region/,
+     *    level.dat, playerdata/, etc.), on regroupe tout dans un dossier
+     *    dédié à la map.
+     */
+    private void installMapZip(File zipFile, File savesDir, String mapName) throws IOException {
+        File finalMapDir = new File(savesDir, mapName);
+        File tempExtractDir = new File(savesDir, ".zr_tmp_" + System.currentTimeMillis());
+        tempExtractDir.mkdirs();
+
+        try {
+            unzip(zipFile, tempExtractDir);
+
+            File[] rootEntries = tempExtractDir.listFiles();
+            if (rootEntries == null || rootEntries.length == 0) {
+                throw new IOException("Le zip téléchargé semble vide ou corrompu.");
+            }
+
+            if (rootEntries.length == 1 && rootEntries[0].isDirectory()) {
+                // Le zip contenait déjà un dossier racine unique : on l'utilise tel quel
+                moveDirectory(rootEntries[0], finalMapDir);
+            } else {
+                // Les fichiers du monde sont directement à la racine du zip : on les
+                // regroupe dans un dossier dédié à la map
+                moveDirectory(tempExtractDir, finalMapDir);
+            }
+        } finally {
+            // Si tempExtractDir a été déplacé/renommé plus haut, cet appel ne fait rien
+            // (le chemin n'existe plus) ; sinon il nettoie les fichiers restants.
+            deleteRecursively(tempExtractDir);
+        }
+    }
+
+    private void moveDirectory(File source, File dest) throws IOException {
+        if (dest.exists()) {
+            throw new IOException("Le dossier de destination existe déjà : " + dest.getAbsolutePath());
+        }
+        if (source.renameTo(dest)) {
+            return;
+        }
+        // Fallback si renameTo échoue (ex: source et destination sur des
+        // partitions/disques différents) : copie récursive puis suppression.
+        copyRecursively(source.toPath(), dest.toPath());
+        deleteRecursively(source);
+    }
+
+    private void copyRecursively(java.nio.file.Path source, java.nio.file.Path dest) throws IOException {
+        Files.walkFileTree(source, new SimpleFileVisitor<java.nio.file.Path>() {
+            @Override
+            public FileVisitResult preVisitDirectory(java.nio.file.Path dir, BasicFileAttributes attrs) throws IOException {
+                Files.createDirectories(dest.resolve(source.relativize(dir)));
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(java.nio.file.Path file, BasicFileAttributes attrs) throws IOException {
+                Files.copy(file, dest.resolve(source.relativize(file)), StandardCopyOption.REPLACE_EXISTING);
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
+    private void deleteRecursively(File file) {
+        if (file == null || !file.exists()) return;
+        File[] children = file.listFiles();
+        if (children != null) {
+            for (File child : children) {
+                deleteRecursively(child);
+            }
+        }
+        file.delete();
     }
 
     private File getMinecraftSavesDir() {
