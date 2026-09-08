@@ -36,8 +36,8 @@ import java.util.zip.ZipInputStream;
 
 public class ZRLauncher extends JFrame {
 
-    // PASSAGE EN VERSION v1.4
-    private static final String CURRENT_VERSION = "v1.4";
+    // PASSAGE EN VERSION v1.5
+    private static final String CURRENT_VERSION = "v1.5";
     
     private static final String UPDATE_JSON_URL = "https://raw.githubusercontent.com/Cryo60/ZR-Launcher/main/launcher_version.json";
     private static final String OFFICIAL_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-maps/main/maps.json";
@@ -519,9 +519,16 @@ public class ZRLauncher extends JFrame {
                     }
                 }
 
+                if (!newExe.exists() || newExe.length() == 0) {
+                    throw new IOException("Le téléchargement de la mise à jour a échoué (fichier vide).");
+                }
+
                 File batFile = new File(currentExe.getParentFile(), "update.bat");
                 try (PrintWriter writer = new PrintWriter(batFile)) {
                     writer.println("@echo off");
+                    // On se place explicitement dans le dossier d'installation : on ne peut pas
+                    // se fier au dossier courant hérité du process qui lance ce script.
+                    writer.println("cd /d \"" + currentExe.getParentFile().getAbsolutePath() + "\"");
                     writer.println("timeout /t 2 /nobreak > NUL");
                     writer.println("del /f /q \"" + exeName + "\"");
                     writer.println("ren \"ZRLauncher_new.exe\" \"" + exeName + "\"");
