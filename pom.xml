@@ -6,7 +6,7 @@
 
     <groupId>me.cryo</groupId>
     <artifactId>zombierool-map-launcher</artifactId>
-    <version>1.5</version>
+    <version>1.6</version>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>

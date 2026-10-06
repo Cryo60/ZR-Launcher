@@ -1,4 +1,5 @@
 /target/
 /jre/
+/dev-mods/
 *.exe
 *.zip

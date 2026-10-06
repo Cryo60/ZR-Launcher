@@ -18,6 +18,7 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -36,8 +37,7 @@ import java.util.zip.ZipInputStream;
 
 public class ZRLauncher extends JFrame {
 
-    // PASSAGE EN VERSION v1.5
-    private static final String CURRENT_VERSION = "v1.5";
+    private static final String CURRENT_VERSION = "v1.6";
     
     private static final String UPDATE_JSON_URL = "https://raw.githubusercontent.com/Cryo60/ZR-Launcher/main/launcher_version.json";
     private static final String OFFICIAL_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-maps/main/maps.json";
@@ -75,11 +75,14 @@ public class ZRLauncher extends JFrame {
     private JTextField txtSearch;
     private JComboBox<String> cbSort;
     private JCheckBox chkFavorites;
+    private JCheckBox chkWeaponPacks;
     private boolean isUpdatingUI = false;
     
     private JTextField txtInstallPath;
     private JLabel lblPath;
     private JButton btnBrowse;
+    private JButton btnAccount;
+    private JButton btnMyMods;
 
     private boolean showingOfficial = true;
     private JsonObject featuredData = null;
@@ -130,18 +133,23 @@ public class ZRLauncher extends JFrame {
     }
 
     private HttpURLConnection createConnection(String urlString) throws IOException {
+        return createConnection(urlString, false);
+    }
+
+    private HttpURLConnection createConnection(String urlString, boolean filesOnly) throws IOException {
         HttpURLConnection conn;
         while (true) {
+            if (filesOnly) InstanceManager.assertAllowedUrl(urlString);
             URL url = new URL(urlString);
             conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestProperty("User-Agent", "ZombieRool-Launcher/1.0");
+            conn.setRequestProperty("User-Agent", "ZombieRool-Launcher/1.6");
             conn.setInstanceFollowRedirects(false);
             
             int status = conn.getResponseCode();
             if (status == HttpURLConnection.HTTP_MOVED_TEMP || 
                 status == HttpURLConnection.HTTP_MOVED_PERM || 
                 status == HttpURLConnection.HTTP_SEE_OTHER) {
-                urlString = conn.getHeaderField("Location");
+                urlString = new URL(url, conn.getHeaderField("Location")).toString();
                 continue;
             }
             break;
@@ -180,6 +188,12 @@ public class ZRLauncher extends JFrame {
         langEN.put("mods", "Mods");
         langEN.put("gunpacks", "Gunpacks");
         langEN.put("no_extra_mods", "No extra mods");
+        langEN.put("account", "Microsoft sign-in");
+        langEN.put("logout_title", "Sign out");
+        langEN.put("logout_body", "Sign out of this Minecraft account on this launcher?");
+        langEN.put("my_mods", "My mods");
+        langEN.put("signed_in", "Signed in as ");
+        langEN.put("weapon_packs", "TaCZ and gunpacks");
 
         langFR.put("title", "ZombieRool Launcher");
         langFR.put("official", "Maps Officielles");
@@ -211,6 +225,12 @@ public class ZRLauncher extends JFrame {
         langFR.put("mods", "Mods");
         langFR.put("gunpacks", "Gunpacks");
         langFR.put("no_extra_mods", "Aucun mod en plus");
+        langFR.put("account", "Connexion Microsoft");
+        langFR.put("logout_title", "Déconnexion");
+        langFR.put("logout_body", "Déconnecter ce compte Minecraft de ce launcher ?");
+        langFR.put("my_mods", "Mes mods");
+        langFR.put("signed_in", "Connecté : ");
+        langFR.put("weapon_packs", "TaCZ et gunpacks");
     }
 
     private String t(String key) {
@@ -265,8 +285,25 @@ public class ZRLauncher extends JFrame {
             updateTexts();
         });
 
+        btnMyMods = new JButton(t("my_mods"));
+        btnMyMods.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btnMyMods.setFocusPainted(false);
+        btnMyMods.addActionListener(e -> openMyMods());
+
+        btnAccount = new JButton();
+        btnAccount.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btnAccount.setFocusPainted(false);
+        btnAccount.addActionListener(e -> onAccountClick());
+        refreshAccountButton();
+
+        JPanel headerEast = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        headerEast.setOpaque(false);
+        headerEast.add(btnMyMods);
+        headerEast.add(btnAccount);
+        headerEast.add(langSelector);
+
         headerPanel.add(lblMainTitle, BorderLayout.WEST);
-        headerPanel.add(langSelector, BorderLayout.EAST);
+        headerPanel.add(headerEast, BorderLayout.EAST);
 
         // --- TABS ---
         JPanel tabsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
@@ -319,9 +356,20 @@ public class ZRLauncher extends JFrame {
         chkFavorites.setFocusPainted(false);
         chkFavorites.addActionListener(e -> renderMaps());
 
+        chkWeaponPacks = new JCheckBox(t("weapon_packs"));
+        chkWeaponPacks.setBackground(COLOR_BG);
+        chkWeaponPacks.setForeground(Color.WHITE);
+        chkWeaponPacks.setFocusPainted(false);
+        chkWeaponPacks.setSelected(prefs.getBoolean("installWeaponPacks", false));
+        chkWeaponPacks.addActionListener(e -> {
+            prefs.putBoolean("installWeaponPacks", chkWeaponPacks.isSelected());
+            flushPreferences();
+        });
+
         filterPanel.add(txtSearch);
         filterPanel.add(cbSort);
         filterPanel.add(chkFavorites);
+        filterPanel.add(chkWeaponPacks);
 
         // --- TOP CONTAINER ---
         JPanel topContainer = new JPanel(new BorderLayout());
@@ -433,9 +481,12 @@ public class ZRLauncher extends JFrame {
         btnCommunity.setText(t("community"));
         lblPath.setText(t("path"));
         btnBrowse.setText(t("browse"));
+        btnMyMods.setText(t("my_mods"));
+        refreshAccountButton();
         
         txtSearch.putClientProperty("JTextField.placeholderText", t("search"));
         chkFavorites.setText(t("fav_only"));
+        chkWeaponPacks.setText(t("weapon_packs"));
         
         int currentSort = cbSort.getSelectedIndex();
         cbSort.setModel(new DefaultComboBoxModel<>(new String[]{t("sort_def"), t("sort_az"), t("sort_za"), t("sort_dl")}));
@@ -503,7 +554,7 @@ public class ZRLauncher extends JFrame {
 
                 File newExe = new File(currentExe.getParentFile(), "ZRLauncher_new.exe");
 
-                HttpURLConnection conn = createConnection(downloadUrl);
+                HttpURLConnection conn = createConnection(downloadUrl, true);
                 int fileSize = conn.getContentLength();
                 
                 try (InputStream in = conn.getInputStream();
@@ -923,6 +974,54 @@ public class ZRLauncher extends JFrame {
         return card;
     }
 
+    private void refreshAccountButton() {
+        String name = MicrosoftAuth.savedName();
+        btnAccount.setText(name == null ? t("account") : t("signed_in") + name);
+    }
+
+    private void onAccountClick() {
+        String name = MicrosoftAuth.savedName();
+        if (name != null) {
+            int choice = JOptionPane.showConfirmDialog(this, t("logout_body"), t("logout_title"), JOptionPane.YES_NO_OPTION);
+            if (choice == JOptionPane.YES_OPTION) {
+                MicrosoftAuth.logout();
+                refreshAccountButton();
+            }
+            return;
+        }
+        btnAccount.setEnabled(false);
+        new Thread(() -> {
+            try {
+                MicrosoftAuth.ensure(this, isFrench, message -> SwingUtilities.invokeLater(() -> {
+                    lblStatus.setText(message);
+                    lblStatus.setForeground(COLOR_BLUE);
+                }));
+                SwingUtilities.invokeLater(() -> {
+                    refreshAccountButton();
+                    lblStatus.setText(t("done"));
+                    lblStatus.setForeground(COLOR_GREEN);
+                    btnAccount.setEnabled(true);
+                });
+            } catch (Exception e) {
+                SwingUtilities.invokeLater(() -> {
+                    lblStatus.setText(t("error") + e.getMessage());
+                    lblStatus.setForeground(new Color(255, 85, 85));
+                    btnAccount.setEnabled(true);
+                });
+            }
+        }).start();
+    }
+
+    private void openMyMods() {
+        try {
+            java.nio.file.Files.createDirectories(MicrosoftAuth.modsDir());
+            Desktop.getDesktop().open(MicrosoftAuth.modsDir().toFile());
+        } catch (Exception e) {
+            lblStatus.setText(t("error") + e.getMessage());
+            lblStatus.setForeground(new Color(255, 85, 85));
+        }
+    }
+
     private void playMap(JsonObject mapData, JButton btnPlay) {
         btnPlay.setEnabled(false);
         new Thread(() -> {
@@ -933,9 +1032,10 @@ public class ZRLauncher extends JFrame {
                             lblStatus.setForeground(COLOR_BLUE);
                             globalProgressBar.setVisible(true);
                             globalProgressBar.setIndeterminate(true);
-                        }));
-                manager.play(mapData);
+                        }), this);
+                manager.play(mapData, chkWeaponPacks.isSelected());
                 SwingUtilities.invokeLater(() -> {
+                    refreshAccountButton();
                     lblStatus.setText(t("done"));
                     lblStatus.setForeground(COLOR_GREEN);
                     globalProgressBar.setIndeterminate(false);
@@ -944,6 +1044,7 @@ public class ZRLauncher extends JFrame {
                 });
             } catch (Exception e) {
                 SwingUtilities.invokeLater(() -> {
+                    refreshAccountButton();
                     lblStatus.setText(t("error") + e.getMessage());
                     lblStatus.setForeground(new Color(255, 85, 85));
                     globalProgressBar.setVisible(false);
@@ -965,15 +1066,47 @@ public class ZRLauncher extends JFrame {
 
     private static String hosts(List<String> urls) {
         List<String> names = new ArrayList<>();
-        for (String url : urls) {
-            try {
-                String host = new URL(url).getHost().replaceFirst("^www\\.", "");
-                names.add(host);
-            } catch (Exception e) {
-                names.add(url);
-            }
-        }
+        for (String url : urls) names.add(linkLabel(url));
         return String.join(", ", names);
+    }
+
+    private static String linkLabel(String url) {
+        try {
+            URL parsed = new URL(url);
+            String host = parsed.getHost().toLowerCase(Locale.ROOT).replaceFirst("^www\\.", "");
+            List<String> segs = new ArrayList<>();
+            for (String part : parsed.getPath().split("/")) {
+                if (!part.isBlank()) segs.add(URLDecoder.decode(part, StandardCharsets.UTF_8));
+            }
+            if (host.endsWith("curseforge.com")) {
+                for (int i = 0; i < segs.size(); i++) {
+                    String seg = segs.get(i);
+                    if (seg.equals("mc-mods") || seg.equals("customization") || seg.equals("texture-packs") || seg.equals("data-packs")) {
+                        if (i + 1 < segs.size()) return prettySlug(segs.get(i + 1));
+                    }
+                }
+            }
+            if (host.endsWith("modrinth.com") && segs.size() >= 2) return prettySlug(segs.get(1));
+            if (!segs.isEmpty()) {
+                String last = segs.get(segs.size() - 1);
+                if (last.matches("(?i).+\\.(jar|zip)")) return prettySlug(last.replaceAll("(?i)\\.(jar|zip)$", ""));
+            }
+            return host;
+        } catch (Exception e) {
+            return url;
+        }
+    }
+
+    private static String prettySlug(String slug) {
+        String[] words = slug.replace('-', ' ').replace('_', ' ').split("\\s+");
+        StringBuilder out = new StringBuilder();
+        for (String word : words) {
+            if (word.isEmpty()) continue;
+            if (out.length() > 0) out.append(' ');
+            out.append(Character.toUpperCase(word.charAt(0)));
+            if (word.length() > 1) out.append(word.substring(1));
+        }
+        return out.toString();
     }
 
     private static String esc(String value) {
@@ -983,6 +1116,9 @@ public class ZRLauncher extends JFrame {
     private void downloadAndInstallMap(String mapName, String downloadUrl, JButton btn) {
         new Thread(() -> {
             try {
+                if (mapName == null || mapName.isBlank() || mapName.contains("..") || mapName.contains("/") || mapName.contains("\\") || mapName.contains(":")) {
+                    throw new IOException(isFrench ? "Nom de map invalide." : "Invalid map name.");
+                }
                 File savesDir = new File(txtInstallPath.getText());
                 if (!savesDir.exists()) savesDir.mkdirs();
 
@@ -995,7 +1131,7 @@ public class ZRLauncher extends JFrame {
                     globalProgressBar.setValue(0);
                 });
                 
-                HttpURLConnection conn = createConnection(downloadUrl);
+                HttpURLConnection conn = createConnection(downloadUrl, true);
                 int fileSize = conn.getContentLength();
                 
                 try (InputStream in = conn.getInputStream();
@@ -1050,11 +1186,26 @@ public class ZRLauncher extends JFrame {
     }
 
     private void unzip(File zipFile, File destDir) throws IOException {
+        int entries = 0;
+        long total = 0;
+        String destRoot = destDir.getCanonicalPath();
         try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(zipFile.toPath()))) {
             ZipEntry zipEntry = zis.getNextEntry();
             while (zipEntry != null) {
-                File newFile = new File(destDir, zipEntry.getName());
-                if (!newFile.getCanonicalPath().startsWith(destDir.getCanonicalPath() + File.separator)) {
+                if (++entries > 20000 || total > 1024L * 1024L * 1024L) {
+                    throw new IOException(isFrench ? "Archive trop grosse." : "Archive is too large.");
+                }
+                String name = zipEntry.getName().replace('\\', '/');
+                String lower = name.toLowerCase();
+                if (name.startsWith("/") || name.contains("../")
+                        || lower.endsWith(".jar") || lower.endsWith(".exe") || lower.endsWith(".bat")
+                        || lower.endsWith(".cmd") || lower.endsWith(".ps1") || lower.endsWith(".dll")
+                        || lower.endsWith(".msi") || lower.endsWith(".lnk")) {
+                    throw new IOException((isFrench ? "Fichier interdit dans la map : " : "Forbidden file in the map: ") + name);
+                }
+                File newFile = new File(destDir, name);
+                String canonical = newFile.getCanonicalPath();
+                if (!canonical.equals(destRoot) && !canonical.startsWith(destRoot + File.separator)) {
                     throw new IOException("Entry is outside of the target dir: " + zipEntry.getName());
                 }
                 if (zipEntry.isDirectory()) {
@@ -1065,6 +1216,7 @@ public class ZRLauncher extends JFrame {
                         byte[] buffer = new byte[8192];
                         int len;
                         while ((len = zis.read(buffer)) > 0) {
+                            total += len;
                             fos.write(buffer, 0, len);
                         }
                     }

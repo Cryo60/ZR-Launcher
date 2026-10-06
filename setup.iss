@@ -1,6 +1,6 @@
 [Setup]
 AppName=ZombieRool Launcher
-AppVersion=1.5
+AppVersion=1.6
 AppPublisher=Cryo
 DefaultDirName={localappdata}\Programs\ZombieRool Launcher
 DefaultGroupName=ZombieRool
