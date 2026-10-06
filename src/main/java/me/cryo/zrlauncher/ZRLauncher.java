@@ -176,6 +176,10 @@ public class ZRLauncher extends JFrame {
         langEN.put("fav_add", "Favorite");
         langEN.put("fav_rem", "Unfavorite");
         langEN.put("no_results", "No maps found matching your criteria.");
+        langEN.put("play", "Play");
+        langEN.put("mods", "Mods");
+        langEN.put("gunpacks", "Gunpacks");
+        langEN.put("no_extra_mods", "No extra mods");
 
         langFR.put("title", "ZombieRool Launcher");
         langFR.put("official", "Maps Officielles");
@@ -203,6 +207,10 @@ public class ZRLauncher extends JFrame {
         langFR.put("fav_add", "Favori");
         langFR.put("fav_rem", "Retirer");
         langFR.put("no_results", "Aucune map ne correspond à votre recherche.");
+        langFR.put("play", "Jouer");
+        langFR.put("mods", "Mods");
+        langFR.put("gunpacks", "Gunpacks");
+        langFR.put("no_extra_mods", "Aucun mod en plus");
     }
 
     private String t(String key) {
@@ -770,7 +778,7 @@ public class ZRLauncher extends JFrame {
                 BorderFactory.createMatteBorder(0, 5, 0, 0, leftBorderColor),
                 new EmptyBorder(15, 15, 15, 20)
         ));
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 160));
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 210));
 
         JLabel lblImage = new JLabel();
         lblImage.setPreferredSize(new Dimension(220, 124));
@@ -841,17 +849,32 @@ public class ZRLauncher extends JFrame {
         JLabel lblDesc = new JLabel("<html><p style='width:400px; font-size:13px; color:#cccccc; margin-top:5px;'>" + desc.replace("\n", "<br>") + "</p></html>");
         lblDesc.setAlignmentX(Component.LEFT_ALIGNMENT);
         
-        JLabel lblStats = new JLabel("<html><span style='font-size:12px; color:#888888'>" + t("downloads") + downloads + "</span></html>");
+        String gameVersion = mapData.has("game_version") ? mapData.get("game_version").getAsString() : "?";
+        String zrVersion = mapData.has("zr_version") ? mapData.get("zr_version").getAsString() : "?";
+        String mapVersion = mapData.has("version") ? mapData.get("version").getAsString() : "1.0.0";
+        List<String> mods = readStringList(mapData, "mods");
+        List<String> gunpacks = readStringList(mapData, "tacz_gunpacks");
+        String modText = mods.isEmpty() ? t("no_extra_mods") : hosts(mods);
+        String packText = gunpacks.isEmpty() ? "0" : hosts(gunpacks);
+
+        JLabel lblStats = new JLabel("<html><span style='font-size:12px; color:#888888'>" + t("downloads") + downloads
+                + " · MC " + esc(gameVersion) + " · ZR " + esc(zrVersion) + " · v" + esc(mapVersion) + "</span></html>");
         lblStats.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel lblMods = new JLabel("<html><span style='font-size:12px; color:#cccccc'><b>" + t("mods") + ":</b> " + esc(modText)
+                + "<br><b>" + t("gunpacks") + ":</b> " + esc(packText) + "</span></html>");
+        lblMods.setAlignmentX(Component.LEFT_ALIGNMENT);
         
         infoPanel.add(headerInfo);
         infoPanel.add(lblDesc);
         infoPanel.add(Box.createVerticalGlue());
         infoPanel.add(lblStats);
+        infoPanel.add(Box.createVerticalStrut(4));
+        infoPanel.add(lblMods);
 
         card.add(infoPanel, BorderLayout.CENTER);
 
-        JPanel actionPanel = new JPanel(new GridBagLayout());
+        JPanel actionPanel = new JPanel();
+        actionPanel.setLayout(new BoxLayout(actionPanel, BoxLayout.Y_AXIS));
         actionPanel.setOpaque(false);
         
         JButton btnInstall = new JButton(t("install"));
@@ -879,11 +902,82 @@ public class ZRLauncher extends JFrame {
             btnInstall.setForeground(new Color(150, 150, 150));
             downloadAndInstallMap(name, downloadUrl, btnInstall);
         });
+        btnInstall.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JButton btnPlay = new JButton(t("play"));
+        btnPlay.setPreferredSize(new Dimension(140, 45));
+        btnPlay.setMaximumSize(new Dimension(140, 45));
+        btnPlay.setFont(new Font("SansSerif", Font.BOLD, 15));
+        btnPlay.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btnPlay.setFocusPainted(false);
+        btnPlay.setBackground(COLOR_ACCENT);
+        btnPlay.setForeground(Color.BLACK);
+        btnPlay.setAlignmentX(Component.CENTER_ALIGNMENT);
+        btnPlay.addActionListener(e -> playMap(mapData, btnPlay));
 
         actionPanel.add(btnInstall);
+        actionPanel.add(Box.createVerticalStrut(8));
+        actionPanel.add(btnPlay);
         card.add(actionPanel, BorderLayout.EAST);
 
         return card;
+    }
+
+    private void playMap(JsonObject mapData, JButton btnPlay) {
+        btnPlay.setEnabled(false);
+        new Thread(() -> {
+            try {
+                InstanceManager manager = new InstanceManager(isFrench, message ->
+                        SwingUtilities.invokeLater(() -> {
+                            lblStatus.setText(message);
+                            lblStatus.setForeground(COLOR_BLUE);
+                            globalProgressBar.setVisible(true);
+                            globalProgressBar.setIndeterminate(true);
+                        }));
+                manager.play(mapData);
+                SwingUtilities.invokeLater(() -> {
+                    lblStatus.setText(t("done"));
+                    lblStatus.setForeground(COLOR_GREEN);
+                    globalProgressBar.setIndeterminate(false);
+                    globalProgressBar.setVisible(false);
+                    btnPlay.setEnabled(true);
+                });
+            } catch (Exception e) {
+                SwingUtilities.invokeLater(() -> {
+                    lblStatus.setText(t("error") + e.getMessage());
+                    lblStatus.setForeground(new Color(255, 85, 85));
+                    globalProgressBar.setVisible(false);
+                    btnPlay.setEnabled(true);
+                });
+                e.printStackTrace();
+            }
+        }).start();
+    }
+
+    private static List<String> readStringList(JsonObject map, String key) {
+        List<String> out = new ArrayList<>();
+        if (!map.has(key) || !map.get(key).isJsonArray()) return out;
+        for (JsonElement el : map.getAsJsonArray(key)) {
+            if (el.isJsonPrimitive()) out.add(el.getAsString());
+        }
+        return out;
+    }
+
+    private static String hosts(List<String> urls) {
+        List<String> names = new ArrayList<>();
+        for (String url : urls) {
+            try {
+                String host = new URL(url).getHost().replaceFirst("^www\\.", "");
+                names.add(host);
+            } catch (Exception e) {
+                names.add(url);
+            }
+        }
+        return String.join(", ", names);
+    }
+
+    private static String esc(String value) {
+        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private void downloadAndInstallMap(String mapName, String downloadUrl, JButton btn) {
