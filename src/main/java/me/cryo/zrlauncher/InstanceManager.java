@@ -188,7 +188,7 @@ public final class InstanceManager {
         cache.mkdirs();
         Map<String, File> wanted = new LinkedHashMap<>();
 
-        File zr = resolveZombieRool(runtime, cache);
+        File zr = resolveZombieRool(runtime, map, cache, mc);
         wanted.put(zr.getName(), zr);
 
         if (runtime.has("required_mods")) {
@@ -444,44 +444,92 @@ public final class InstanceManager {
         }
     }
 
-    private File resolveZombieRool(JsonObject runtime, File cache) throws Exception {
+    private File resolveZombieRool(JsonObject runtime, JsonObject map, File cache, String mc) throws Exception {
+        String requested = ZombieRoolReleases.requirement(map);
         if (runtime.has("zombierool_url") && !runtime.get("zombierool_url").getAsString().isBlank()) {
-            return resolveUrl(runtime.get("zombierool_url").getAsString(), cache, "1.20.1", true);
+            File file = resolveUrl(runtime.get("zombierool_url").getAsString(), cache, mc, true);
+            requireZombieRoolVersion(file, requested);
+            return file;
         }
         String repo = runtime.has("zombierool_github") ? runtime.get("zombierool_github").getAsString() : "Cryo60/ZombieRool";
-        File devDir = launcherDir() == null ? null : new File(launcherDir(), "dev-mods");
-        if (devDir != null && devDir.isDirectory()) {
-            File[] built = devDir.listFiles((dir, name) -> name.toLowerCase(Locale.ROOT).contains("zombierool") && name.endsWith(".jar") && !name.contains("sources"));
-            if (built != null && built.length > 0) return built[0];
-        }
+        File beside = launcherDir();
+        File devDir = beside == null ? null : new File(beside, "dev-mods");
+        File local = matchingZombieRool(devDir, requested);
+        if (local != null) return local;
         Exception githubError = null;
         try {
-            HttpURLConnection conn = open("https://api.github.com/repos/" + repo + "/releases/latest", "application/vnd.github+json");
-            try (InputStreamReader reader = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)) {
-                JsonObject json = new Gson().fromJson(reader, JsonObject.class);
-                if (json != null && json.has("assets")) {
-                    for (JsonElement el : json.getAsJsonArray("assets")) {
-                        JsonObject asset = el.getAsJsonObject();
-                        String name = asset.get("name").getAsString();
-                        if (name.endsWith(".jar") && name.toLowerCase(Locale.ROOT).contains("zombierool")) {
-                            return downloadNamed(asset.get("browser_download_url").getAsString(), new File(cache, name));
-                        }
+            JsonArray releases = new JsonArray();
+            if (requested.isEmpty()) {
+                HttpURLConnection conn = open("https://api.github.com/repos/" + repo + "/releases/latest", "application/vnd.github+json");
+                try (InputStreamReader reader = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)) {
+                    releases.add(new Gson().fromJson(reader, JsonObject.class));
+                }
+            } else {
+                // Include older pages so early maps keep working as the release catalogue grows.
+                for (int page = 1; ; page++) {
+                    HttpURLConnection conn = open("https://api.github.com/repos/" + repo + "/releases?per_page=100&page=" + page, "application/vnd.github+json");
+                    JsonArray rows;
+                    try (InputStreamReader reader = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)) {
+                        rows = new Gson().fromJson(reader, JsonArray.class);
                     }
+                    releases.addAll(rows);
+                    if (rows.size() < 100) break;
                 }
             }
+            JsonObject release = ZombieRoolReleases.select(releases, requested);
+            if (release == null) throw new IOException((french ? "Version ZombieRool introuvable : " : "ZombieRool release not found: ") + requested);
+            String selected = ZombieRoolReleases.normalize(release.get("tag_name").getAsString());
+            status.accept((french ? "Installation de ZombieRool " : "Installing ZombieRool ") + selected);
+            JsonObject asset = ZombieRoolReleases.asset(release);
+            File file = downloadNamed(asset.get("browser_download_url").getAsString(), new File(cache, asset.get("name").getAsString()));
+            requireZombieRoolVersion(file, selected);
+            return file;
         } catch (Exception e) {
             githubError = e;
         }
-
-        File beside = launcherDir();
-        if (beside != null) {
-            File[] jars = beside.listFiles((dir, name) -> name.toLowerCase(Locale.ROOT).startsWith("zombierool") && name.endsWith(".jar"));
-            if (jars != null && jars.length > 0) return jars[0];
+        // Offline fallback is restricted to the requested version, never a random nearby JAR.
+        if (!requested.isEmpty()) {
+            local = matchingZombieRool(cache, requested);
+            if (local != null) return local;
         }
-        throw new IOException((french
-                ? "Jar ZombieRool introuvable. Renseigne zombierool_url dans runtime.json, ou pose le jar à côté du launcher."
-                : "ZombieRool jar not found. Set zombierool_url in runtime.json, or drop the jar next to the launcher.")
-                + (githubError == null || githubError.getMessage() == null ? "" : " (" + githubError.getMessage() + ")"));
+        local = matchingZombieRool(beside, requested);
+        if (local != null) return local;
+        throw new IOException((french ? "Impossible de preparer ZombieRool " : "Cannot prepare ZombieRool ")
+                + (requested.isEmpty() ? (french ? "stable" : "stable") : requested)
+                + ". " + (githubError == null ? "" : githubError.getMessage()), githubError);
+    }
+
+    static String zombieRoolVersion(File file) {
+        for (ModOne mod : ModMeta.read(file).mods) {
+            if (mod.id.equals("zombierool")) {
+                // The published 1.6.0 JAR predates the normal version format.
+                if (mod.version.equals("1.20.11.6.0")) return "1.6.0";
+                return ZombieRoolReleases.normalize(mod.version);
+            }
+        }
+        return "";
+    }
+
+    static boolean matchesZombieRoolVersion(File file, String requested) {
+        String actual = zombieRoolVersion(file);
+        String wanted = ZombieRoolReleases.normalize(requested);
+        boolean preview = actual.matches(".*-(?:alpha|beta|rc|dev)(?:[.-].*|\\d*)$");
+        return !actual.isEmpty() && ((wanted.isEmpty() && !preview) || actual.equals(wanted)
+                || actual.replaceFirst("-stable$", "").equals(wanted.replaceFirst("-stable$", "")));
+    }
+
+    private File matchingZombieRool(File folder, String requested) {
+        if (folder == null || !folder.isDirectory()) return null;
+        File[] files = folder.listFiles((dir, name) -> name.toLowerCase(Locale.ROOT).startsWith("zombierool")
+                && name.endsWith(".jar") && !name.matches(".*-(sources|slim|javadoc|dev)\\.jar$"));
+        if (files != null) for (File file : files) if (matchesZombieRoolVersion(file, requested)) return file;
+        return null;
+    }
+
+    private void requireZombieRoolVersion(File file, String requested) throws IOException {
+        if (!matchesZombieRoolVersion(file, requested))
+            throw new IOException((french ? "Le JAR ne correspond pas a ZombieRool " : "JAR does not match ZombieRool ")
+                    + requested + ": " + file.getName());
     }
 
     private void syncGunpacks(File instance, JsonObject map, String mc) throws Exception {
@@ -758,7 +806,7 @@ public final class InstanceManager {
         vars.put("classpath", cp.toString());
         vars.put("natives_directory", natives.getAbsolutePath());
         vars.put("launcher_name", "ZRLauncher");
-        vars.put("launcher_version", "1.6");
+        vars.put("launcher_version", "1.7");
         vars.put("auth_player_name", session.name);
         vars.put("auth_uuid", session.uuid);
         vars.put("auth_access_token", session.accessToken);
@@ -1087,7 +1135,7 @@ public final class InstanceManager {
             assertAllowedUrl(urlString);
             URL url = new URL(urlString);
             conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestProperty("User-Agent", "ZombieRool-Launcher/1.6");
+            conn.setRequestProperty("User-Agent", "ZombieRool-Launcher/1.7");
             if (accept != null) conn.setRequestProperty("Accept", accept);
             conn.setConnectTimeout(20000);
             conn.setReadTimeout(120000);

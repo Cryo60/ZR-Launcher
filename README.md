@@ -4,6 +4,7 @@ Welcome to the official **ZombieRool Map Launcher**! This tool allows you to eas
 
 ## ✨ Features
 * **Play:** Builds a separate Forge instance for that map, so one map's mods do not replace your usual Minecraft folder.
+* **Map versions:** Play installs the ZombieRool version declared by each map. Maps without a version use the latest stable release. Maps targeting a beta use that beta; unavailable versions show an error.
 * **Install:** Copies the world into the folder shown at the bottom of the launcher.
 * **Official & Community Maps:** Easily switch between maps made by the dev team and the community.
 * **Auto-Updater:** The launcher updates itself automatically when a new version is released.

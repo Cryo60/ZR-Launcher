@@ -37,7 +37,7 @@ import java.util.zip.ZipInputStream;
 
 public class ZRLauncher extends JFrame {
 
-    private static final String CURRENT_VERSION = "v1.6";
+    private static final String CURRENT_VERSION = "v1.7";
     
     private static final String UPDATE_JSON_URL = "https://raw.githubusercontent.com/Cryo60/ZR-Launcher/main/launcher_version.json";
     private static final String OFFICIAL_JSON_URL = "https://raw.githubusercontent.com/Cryo60/zombierool-maps/main/maps.json";

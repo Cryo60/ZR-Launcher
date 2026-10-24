@@ -6,7 +6,7 @@
 
     <groupId>me.cryo</groupId>
     <artifactId>zombierool-map-launcher</artifactId>
-    <version>1.6</version>
+    <version>1.7</version>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
@@ -15,6 +15,12 @@
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
+            <scope>test</scope>
+        </dependency>
         <!-- Gson pour le JSON -->
         <dependency>
             <groupId>com.google.code.gson</groupId>
