@@ -91,11 +91,11 @@ public class ZRLauncher extends JFrame {
     
     private final Map<String, Image> imageCache = new HashMap<>();
 
-    private final Color COLOR_BG = new Color(30, 33, 36);
-    private final Color COLOR_CARD = new Color(43, 47, 51);
-    private final Color COLOR_ACCENT = new Color(234, 179, 8);
+    private final Color COLOR_BG = new Color(16, 20, 18);
+    private final Color COLOR_CARD = new Color(26, 33, 28);
+    private final Color COLOR_ACCENT = new Color(218, 185, 129);
     private final Color COLOR_GREEN = new Color(46, 160, 67);
-    private final Color COLOR_BLUE = new Color(88, 166, 255);
+    private final Color COLOR_BLUE = new Color(121, 158, 127);
 
     public ZRLauncher() {
         isFrench = prefs.getBoolean("isFrench", false);
@@ -239,7 +239,8 @@ public class ZRLauncher extends JFrame {
 
     private void setupUI() {
         setTitle(t("title") + " " + CURRENT_VERSION);
-        setSize(1050, 750);
+        setSize(1180, 810);
+        setMinimumSize(new Dimension(1040,720));
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
@@ -268,11 +269,11 @@ public class ZRLauncher extends JFrame {
         // --- HEADER ---
         JPanel headerPanel = new JPanel(new BorderLayout());
         headerPanel.setBackground(COLOR_BG);
-        headerPanel.setBorder(new EmptyBorder(20, 25, 10, 25));
+        headerPanel.setBorder(new EmptyBorder(28, 28, 22, 28));
 
         // Affichage de la version à côté du titre
         JLabel lblMainTitle = new JLabel("<html>ZOMBIEROOL <span style='font-size:16px; color:#888888; font-style:italic;'>by Cryo60</span> <span style='font-size:14px; color:#58a6ff; font-weight:normal;'>" + CURRENT_VERSION + "</span></html>");
-        lblMainTitle.setFont(new Font("SansSerif", Font.BOLD, 32));
+        lblMainTitle.setFont(new Font("SansSerif", Font.BOLD, 29));
         lblMainTitle.setForeground(COLOR_ACCENT);
         
         langSelector = new JComboBox<>(new String[]{"English", "Français"});
@@ -306,9 +307,13 @@ public class ZRLauncher extends JFrame {
         headerPanel.add(headerEast, BorderLayout.EAST);
 
         // --- TABS ---
-        JPanel tabsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
+        JPanel tabsPanel = new JPanel();
+        tabsPanel.setLayout(new BoxLayout(tabsPanel,BoxLayout.Y_AXIS));
+        tabsPanel.setPreferredSize(new Dimension(208,180));
         tabsPanel.setBackground(COLOR_BG);
-        tabsPanel.setBorder(new EmptyBorder(0, 20, 5, 20));
+        tabsPanel.setBorder(new EmptyBorder(22, 20, 20, 16));
+        JLabel libraryLabel=new JLabel(isFrench?"BIBLIOTHEQUE":"MAP LIBRARY");libraryLabel.setFont(new Font("SansSerif",Font.BOLD,11));libraryLabel.setForeground(COLOR_ACCENT);
+        tabsPanel.add(libraryLabel);tabsPanel.add(Box.createVerticalStrut(20));
 
         btnOfficial = createTabButton(t("official"));
         btnCommunity = createTabButton(t("community"));
@@ -326,7 +331,10 @@ public class ZRLauncher extends JFrame {
         });
 
         tabsPanel.add(btnOfficial);
+        tabsPanel.add(Box.createVerticalStrut(10));
         tabsPanel.add(btnCommunity);
+        tabsPanel.add(Box.createVerticalStrut(28));
+        JLabel libraryHelp=new JLabel(isFrench?"<html>Une nouvelle carte.<br>Une nouvelle survie.</html>":"<html>A new map.<br>Another last stand.</html>");libraryHelp.setForeground(new Color(163,175,165));tabsPanel.add(libraryHelp);
         updateTabStyles();
 
         // --- FILTER PANEL (Recherche, Tri, Favoris) ---
@@ -334,7 +342,8 @@ public class ZRLauncher extends JFrame {
         filterPanel.setBackground(COLOR_BG);
         filterPanel.setBorder(new EmptyBorder(0, 15, 10, 20));
 
-        txtSearch = new JTextField(20);
+        txtSearch = new JTextField(24);
+        txtSearch.setPreferredSize(new Dimension(260,38));
         txtSearch.putClientProperty("JTextField.placeholderText", t("search"));
         txtSearch.getDocument().addDocumentListener(new DocumentListener() {
             public void insertUpdate(DocumentEvent e) { renderMaps(); }
@@ -378,28 +387,29 @@ public class ZRLauncher extends JFrame {
         
         JPanel tabsAndFilters = new JPanel(new BorderLayout());
         tabsAndFilters.setBackground(COLOR_BG);
-        tabsAndFilters.add(tabsPanel, BorderLayout.NORTH);
+        add(tabsPanel,BorderLayout.WEST);
         tabsAndFilters.add(filterPanel, BorderLayout.SOUTH);
         
         topContainer.add(tabsAndFilters, BorderLayout.CENTER);
         add(topContainer, BorderLayout.NORTH);
 
         // --- MAPS LIST ---
-        mainContentPanel = new JPanel();
+        mainContentPanel = new JPanel(){@Override public Dimension getPreferredSize(){Dimension size=super.getPreferredSize();if(getParent() instanceof JViewport viewport)size.width=viewport.getWidth();return size;}};
         mainContentPanel.setLayout(new BoxLayout(mainContentPanel, BoxLayout.Y_AXIS));
         mainContentPanel.setBackground(COLOR_BG);
-        mainContentPanel.setBorder(new EmptyBorder(10, 25, 40, 25));
+        mainContentPanel.setBorder(new EmptyBorder(14, 12, 36, 28));
         
         scrollPane = new JScrollPane(mainContentPanel);
         scrollPane.getVerticalScrollBar().setUnitIncrement(20);
         scrollPane.setBorder(null);
+        scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         scrollPane.setBackground(COLOR_BG);
         scrollPane.getViewport().setBackground(COLOR_BG);
         add(scrollPane, BorderLayout.CENTER);
 
         // --- BOTTOM BAR ---
         JPanel bottomContainer = new JPanel(new BorderLayout(0, 15));
-        bottomContainer.setBackground(new Color(25, 27, 30));
+        bottomContainer.setBackground(new Color(19, 26, 21));
         bottomContainer.setBorder(new EmptyBorder(15, 25, 15, 25));
 
         JPanel pathPanel = new JPanel(new BorderLayout(10, 0));
@@ -413,7 +423,7 @@ public class ZRLauncher extends JFrame {
         
         txtInstallPath = new JTextField(savedPath);
         txtInstallPath.setEditable(false);
-        txtInstallPath.setBackground(new Color(40, 44, 48));
+        txtInstallPath.setBackground(new Color(17, 24, 18));
         txtInstallPath.setForeground(Color.WHITE);
         txtInstallPath.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(60, 60, 60)),
@@ -460,7 +470,9 @@ public class ZRLauncher extends JFrame {
     private JButton createTabButton(String text) {
         JButton btn = new JButton(text);
         btn.setFont(new Font("SansSerif", Font.BOLD, 14));
-        btn.setPreferredSize(new Dimension(180, 40));
+        btn.setPreferredSize(new Dimension(172,44));
+        btn.setMaximumSize(new Dimension(172,44));
+        btn.setAlignmentX(Component.LEFT_ALIGNMENT);
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         btn.setFocusPainted(false);
         return btn;
@@ -824,15 +836,16 @@ public class ZRLauncher extends JFrame {
         JPanel card = new JPanel(new BorderLayout(20, 0));
         card.setBackground(COLOR_CARD);
         
-        Color leftBorderColor = isFeatured ? COLOR_ACCENT : new Color(80, 85, 90);
+        Color leftBorderColor = isFeatured ? COLOR_ACCENT : new Color(52,64,52);
         card.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 5, 0, 0, leftBorderColor),
-                new EmptyBorder(15, 15, 15, 20)
+                new EmptyBorder(20, 18, 20, 22)
         ));
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 210));
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 240));
+        card.setMinimumSize(new Dimension(0,210));
 
         JLabel lblImage = new JLabel();
-        lblImage.setPreferredSize(new Dimension(220, 124));
+        lblImage.setPreferredSize(new Dimension(240,140));
         lblImage.setOpaque(true);
         lblImage.setBackground(new Color(20, 22, 25));
         lblImage.setHorizontalAlignment(SwingConstants.CENTER);
@@ -897,7 +910,7 @@ public class ZRLauncher extends JFrame {
         });
         headerInfo.add(btnFav);
 
-        JLabel lblDesc = new JLabel("<html><p style='width:400px; font-size:13px; color:#cccccc; margin-top:5px;'>" + desc.replace("\n", "<br>") + "</p></html>");
+        JLabel lblDesc = new JLabel("<html><p style='width:300px; font-size:13px; color:#cccccc; margin-top:5px;'>" + desc.replace("\n", "<br>") + "</p></html>");
         lblDesc.setAlignmentX(Component.LEFT_ALIGNMENT);
         
         String gameVersion = mapData.has("game_version") ? mapData.get("game_version").getAsString() : "?";
@@ -1331,7 +1344,11 @@ public class ZRLauncher extends JFrame {
         }
 
         try {
-            UIManager.put("Button.arc", 10);
+            UIManager.put("Button.arc", 6);
+            UIManager.put("defaultFont",new Font("Segoe UI",Font.PLAIN,14));
+            UIManager.put("Component.focusColor",new Color(218,185,129));
+            UIManager.put("TextComponent.arc",6);
+            UIManager.put("Button.margin",new Insets(9,16,9,16));
             UIManager.put("Component.arc", 10);
             UIManager.put("ProgressBar.arc", 10);
             UIManager.put("ScrollBar.thumbArc", 999);
