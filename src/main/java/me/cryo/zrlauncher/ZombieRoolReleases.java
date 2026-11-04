@@ -12,7 +12,7 @@ final class ZombieRoolReleases {
     static String normalize(String value) {
         String result = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
         if (result.isEmpty() || result.equals("unknown") || result.equals("?") || result.equals("latest")) return "";
-        return result.replaceFirst("^zombierool-\\d+\\.\\d+(?:\\.\\d+)?-", "")
+        return result.replaceFirst("^zombierool[-_ ]*", "").replaceFirst("^1\\.20\\.1[-_]", "")
                 .replaceFirst("^v(?=\\d)", "").replaceFirst("\\.jar$", "").replaceAll("\\s+", "-");
     }
 

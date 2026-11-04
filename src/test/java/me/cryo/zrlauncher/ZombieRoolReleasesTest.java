@@ -71,6 +71,22 @@ public class ZombieRoolReleasesTest {
         assertNull(ZombieRoolReleases.select(catalogue(), "1.6.2"));
         assertNull(ZombieRoolReleases.select(catalogue(), "26.7-beta.2"));
     }
+
+    @Test public void acceptsModernPatchReleaseNamesAndJarMetadata() throws Exception {
+        for (String label : new String[]{"26.7.1", "v26.7.1", "zombierool-26.7.1.jar", "ZombieRool-1.20.1-26.7.1.jar"}) {
+            JsonObject map = new JsonObject(); map.addProperty("zr_version", label);
+            assertEquals("26.7.1", ZombieRoolReleases.requirement(map));
+        }
+        assertEquals("26.7-beta.6", ZombieRoolReleases.normalize("zombierool-26.7-beta.6.jar"));
+        JsonArray releases = catalogue();
+        releases.add(release("26.7.1", false, "zombierool-26.7.1-slim.jar", "zombierool-26.7.1.jar"));
+        JsonObject selected = ZombieRoolReleases.select(releases, "26.7.1");
+        assertEquals("26.7.1", selected.get("tag_name").getAsString());
+        assertEquals("zombierool-26.7.1.jar", ZombieRoolReleases.asset(selected).get("name").getAsString());
+        assertTrue(InstanceManager.matchesZombieRoolVersion(jar("renamed-patch.jar", "26.7.1"), "26.7.1"));
+        assertFalse(InstanceManager.matchesZombieRoolVersion(jar("old-preview.jar", "26.7-beta.6"), "26.7.1"));
+        assertEquals("1.6.1", ZombieRoolReleases.normalize(ZombieRoolReleases.select(releases, "1.6.1").get("tag_name").getAsString()));
+    }
     @Test public void ignoresDraftsAndDevelopmentJars() {
         JsonObject draft = release("1.6.2", false, "zombierool-1.6.2.jar"); draft.addProperty("draft", true);
         JsonArray releases = catalogue(); releases.add(draft);
